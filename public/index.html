@@ -912,10 +912,11 @@ html, body {
     <div class="call-videos">
       <!-- Friend's video — big background -->
       <div id="remote-slot">
-        <video id="remote-video" autoplay playsinline muted></video>
+        <!-- Not muted: audio comes through WebRTC -->
+        <video id="remote-video" autoplay playsinline></video>
         <span class="slot-label">Friend</span>
       </div>
-      <!-- Your video — small PiP corner -->
+      <!-- Your video — small PiP corner (always muted to prevent echo) -->
       <div id="local-slot">
         <video id="local-video" autoplay playsinline muted></video>
         <span class="slot-label">You</span>
@@ -948,11 +949,8 @@ const state = {
   theirVolume: 1.0,
   isMuted: false,
   isCamOff: false,
-  localStream: null,
-  remoteStream: null,
+  localStream: null,    // contains both video + audio tracks
   peerConn: null,
-  audioCtx: null,
-  remoteAudioGain: null,
   syncInterval: null,
   controlsTimer: null,
   isDraggingWidget: false,
@@ -995,7 +993,7 @@ function initSocket() {
     state.roomCode = code;
     state.isHost = false;
     showScreen('file-picker');
-    startWebRTC(false); // joiner creates offer after partner-joined confirms
+    startWebRTC(false); // joiner waits for offer after partner-joined
   });
 
   s.on('partner-joined', () => {
@@ -1108,7 +1106,6 @@ function onSubSelected(e) {
 }
 
 function checkReadyToStart() {
-  // Can start if video is selected (subtitle optional)
   if (state.videoFile) {
     const btn = document.getElementById('start-btn');
     btn.disabled = false;
@@ -1138,8 +1135,6 @@ function startWatching() {
   startControlsTimer();
   document.getElementById('resync-btn').classList.add('show');
 
-  // If host, show play button — both need to be ready
-  // Start subtitle tracking
   if (state.subtitles.length) startSubtitleTracking();
 }
 
@@ -1158,7 +1153,6 @@ function setupPlayerEvents() {
   // Tap to show controls
   video.addEventListener('click', showControls);
   document.getElementById('player-screen').addEventListener('click', (e) => {
-    // If tap is not on controls/widget/emoji
     const ignore = ['controls','call-widget','emoji-panel','emoji-toggle',
                     'vol-zone-left','vol-zone-right'];
     if (!ignore.some(id => document.getElementById(id)?.contains(e.target))) {
@@ -1250,20 +1244,6 @@ function setupProgressDrag() {
 //  TOUCH GESTURES (double-tap seek, swipe volume)
 // ════════════════════════════════════════════════
 function setupTouchGestures() {
-  // Double-tap for seek handled separately per zone
-  // We use the seek-left / seek-right zones
-  let tapTimer = null;
-
-  function handleDoubleTap(side) {
-    seekRelative(side === 'right' ? 10 : -10);
-  }
-
-  ['seek-left', 'seek-right'].forEach(id => {
-    const el = document.getElementById(id);
-    // Use the swipe zones for double tap
-  });
-
-  // Double tap on left half → -10s, right half → +10s
   let lastTapTime = 0;
   let lastTapSide = null;
   document.getElementById('player-screen').addEventListener('touchstart', (e) => {
@@ -1271,8 +1251,7 @@ function setupTouchGestures() {
     const side = t.clientX < window.innerWidth / 2 ? 'left' : 'right';
     const now = Date.now();
     if (now - lastTapTime < 300 && side === lastTapSide) {
-      // Double tap
-      handleDoubleTap(side);
+      seekRelative(side === 'right' ? 10 : -10);
       lastTapTime = 0;
     } else {
       lastTapTime = now;
@@ -1312,8 +1291,10 @@ function setupVolumeSwipe(zoneId, who) {
       state.myVolume = newVol;
       document.getElementById('main-video').volume = newVol;
     } else {
+      // Their volume — directly set on the remote video element
       state.theirVolume = newVol;
-      if (state.remoteAudioGain) state.remoteAudioGain.gain.value = newVol;
+      const remoteVideo = document.getElementById('remote-video');
+      if (remoteVideo) remoteVideo.volume = newVol;
     }
 
     fill.style.height = (newVol * 100) + '%';
@@ -1330,7 +1311,6 @@ function setupVolumeSwipe(zoneId, who) {
 //  SYNC ENGINE
 // ════════════════════════════════════════════════
 function onServerClock({ serverTime }) {
-  // If video is playing, check drift
   const video = document.getElementById('main-video');
   if (!video || video.paused || !state.syncStartServerTime) return;
 
@@ -1339,7 +1319,6 @@ function onServerClock({ serverTime }) {
   const drift = Math.abs(video.currentTime - expectedPos);
 
   if (drift > 1.5) {
-    // Auto correct
     video.currentTime = expectedPos;
     showSyncBanner('🔄 Auto-synced');
   }
@@ -1501,35 +1480,34 @@ function setupWidgetDrag() {
 function setupWidgetResize() {
   const widget = document.getElementById('call-widget');
   const handle = document.getElementById('widget-resize');
-  let startX, startY, startW;
+  let startX, startW, isResizing = false;
 
   handle.addEventListener('touchstart', (e) => {
     e.stopPropagation();
     startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
     startW = widget.offsetWidth;
+    isResizing = true;
   }, { passive: true });
 
   document.addEventListener('touchmove', (e) => {
-    if (!handle._resizing) return;
+    if (!isResizing) return;
     const dx = e.touches[0].clientX - startX;
     const newW = Math.max(90, Math.min(220, startW + dx));
     widget.style.width = newW + 'px';
   }, { passive: true });
 
-  handle.addEventListener('touchstart', () => { handle._resizing = true; });
-  document.addEventListener('touchend', () => { handle._resizing = false; });
+  document.addEventListener('touchend', () => { isResizing = false; });
 }
 
 // ════════════════════════════════════════════════
-//  WEBRTC — VIDEO ONLY (no audio tracks)
+//  WEBRTC — VIDEO + AUDIO
 //  ─────────────────────────────────────────────
-//  WHY: Adding audio tracks to WebRTC makes Android
-//  switch to MODE_IN_COMMUNICATION system-wide,
-//  degrading ALL audio including the movie.
-//  Fix: WebRTC carries VIDEO only. Voice is streamed
-//  separately as raw PCM via Socket.io and played
-//  through AudioContext — stays in media mode always.
+//  getUserMedia captures both video and audio.
+//  Both tracks are added to the RTCPeerConnection
+//  so voice travels over WebRTC alongside video.
+//  The local <video> stays muted (echo prevention).
+//  The remote <video> is NOT muted — partner audio
+//  plays directly from the WebRTC stream.
 // ════════════════════════════════════════════════
 const ICE_SERVERS = {
   iceServers: [
@@ -1540,27 +1518,38 @@ const ICE_SERVERS = {
 
 async function startWebRTC(isOfferer) {
   try {
-    // VIDEO ONLY — no audio: true here
+    // Capture video + audio together in one getUserMedia call
     state.localStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 320 } },
-      audio: false
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
     });
 
+    // Show local preview (muted to prevent echo)
     document.getElementById('local-video').srcObject = state.localStream;
 
     state.peerConn = new RTCPeerConnection(ICE_SERVERS);
 
-    // Only add VIDEO track — no audio track added to peer connection
-    state.localStream.getVideoTracks().forEach(track => {
+    // Add ALL tracks (video + audio) to the peer connection
+    state.localStream.getTracks().forEach(track => {
       state.peerConn.addTrack(track, state.localStream);
     });
 
+    // When remote tracks arrive, attach to the remote video element
     state.peerConn.ontrack = (e) => {
-      const remoteStream = e.streams[0];
-      // Remote video — no audio in stream so muted is irrelevant but safe
       const remoteVideo = document.getElementById('remote-video');
-      remoteVideo.srcObject = remoteStream;
-      remoteVideo.muted = true;
+      // Use streams[0] if available, otherwise build one from the track
+      remoteVideo.srcObject = e.streams[0] || (() => {
+        const s = new MediaStream();
+        s.addTrack(e.track);
+        return s;
+      })();
+      // Apply current "their volume" preference
+      remoteVideo.volume = state.theirVolume;
       document.getElementById('call-widget').classList.add('active');
       document.getElementById('partner-dot').classList.remove('offline');
     };
@@ -1571,9 +1560,6 @@ async function startWebRTC(isOfferer) {
 
     handleVideoOrientation();
 
-    // Start mic audio capture separately — completely outside WebRTC
-    await startAudioCapture();
-
     if (isOfferer) {
       const offer = await state.peerConn.createOffer();
       await state.peerConn.setLocalDescription(offer);
@@ -1582,91 +1568,8 @@ async function startWebRTC(isOfferer) {
 
   } catch (err) {
     console.error('WebRTC error:', err);
-    showSyncBanner('⚠️ Camera access denied');
+    showSyncBanner('⚠️ Camera/mic access denied');
   }
-}
-
-// ── AUDIO CAPTURE ────────────────────────────────
-// Mic → AudioContext (16kHz mono) → PCM chunks → Socket.io → Partner
-async function startAudioCapture() {
-  try {
-    const micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        sampleRate: 16000,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      },
-      video: false
-    });
-
-    state.micStream = micStream;
-
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    // Force 16kHz — good for voice, low bandwidth
-    state.captureCtx = new AudioCtx({ sampleRate: 16000 });
-
-    const source = state.captureCtx.createMediaStreamSource(micStream);
-    // ScriptProcessor: 2048 samples at 16kHz = 128ms chunks — good latency/quality balance
-    const processor = state.captureCtx.createScriptProcessor(2048, 1, 1);
-    source.connect(processor);
-    // Must connect to destination for onaudioprocess to fire (browser quirk)
-    processor.connect(state.captureCtx.destination);
-
-    processor.onaudioprocess = (e) => {
-      if (state.isMuted) return;
-      const pcm = e.inputBuffer.getChannelData(0); // Float32Array
-      // slice() copies the buffer before it gets reused
-      state.socket.emit('audio-chunk', pcm.buffer.slice(0));
-    };
-
-    state.audioProcessor = processor;
-
-    // Setup playback for incoming audio from partner
-    setupAudioPlayback();
-
-  } catch (err) {
-    console.error('Mic error:', err);
-    showSyncBanner('⚠️ Mic access denied — voice unavailable');
-  }
-}
-
-// ── AUDIO PLAYBACK ───────────────────────────────
-// Socket.io PCM chunks → AudioContext → scheduled playback (media mode)
-function setupAudioPlayback() {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  state.playCtx = new AudioCtx({ sampleRate: 16000 });
-
-  const gainNode = state.playCtx.createGain();
-  gainNode.gain.value = state.theirVolume;
-  gainNode.connect(state.playCtx.destination);
-  state.remoteAudioGain = gainNode;
-
-  // nextPlayTime schedules buffers back-to-back for smooth playback
-  state.nextPlayTime = 0;
-
-  state.socket.on('audio-chunk', (buffer) => {
-    try {
-      const pcm = new Float32Array(buffer);
-      const audioBuffer = state.playCtx.createBuffer(1, pcm.length, 16000);
-      audioBuffer.getChannelData(0).set(pcm);
-
-      const src = state.playCtx.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(gainNode);
-
-      const now = state.playCtx.currentTime;
-      // Keep a small jitter buffer (80ms) to absorb network hiccups
-      if (state.nextPlayTime < now + 0.08) {
-        state.nextPlayTime = now + 0.08;
-      }
-      src.start(state.nextPlayTime);
-      state.nextPlayTime += audioBuffer.duration;
-    } catch(e) {
-      // Ignore decode errors on bad chunks
-    }
-  });
 }
 
 async function onWebRTCOffer(offer) {
@@ -1690,8 +1593,8 @@ async function onWebRTCIce(candidate) {
 function toggleMic() {
   const btn = document.getElementById('mic-btn');
   state.isMuted = !state.isMuted;
-  // Mute the separate mic stream (not localStream which is video-only)
-  state.micStream?.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
+  // Mute/unmute the audio track inside localStream
+  state.localStream?.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
   btn.textContent = state.isMuted ? '🔇' : '🎙';
   btn.classList.toggle('muted', state.isMuted);
 }
@@ -1706,18 +1609,13 @@ function toggleCam() {
 
 function endCall() {
   state.peerConn?.close();
+  // Stop all tracks — both video and audio
   state.localStream?.getTracks().forEach(t => t.stop());
-  state.micStream?.getTracks().forEach(t => t.stop());
-  state.audioProcessor?.disconnect();
-  state.captureCtx?.close();
-  state.playCtx?.close();
   state.peerConn = null;
   state.localStream = null;
-  state.micStream = null;
-  state.audioProcessor = null;
-  state.captureCtx = null;
-  state.playCtx = null;
-  state.remoteAudioGain = null;
+  const remoteVideo = document.getElementById('remote-video');
+  remoteVideo.srcObject = null;
+  document.getElementById('local-video').srcObject = null;
   document.getElementById('call-widget').classList.remove('active');
 }
 
