@@ -155,14 +155,9 @@ io.on("connection", (socket) => {
     socket.to(code).emit("remote-emoji", { emoji });
   });
 
-  // ── AUDIO CHUNK RELAY ─────────────────────────────────────────────
-  // Voice PCM binary — keeps audio out of WebRTC so Android stays
-  // in media audio mode instead of communication mode
-  socket.on("audio-chunk", (buffer) => {
-    socket.to(socket.roomCode).emit("audio-chunk", buffer);
-  });
-
   // ── WEBRTC SIGNALING ──────────────────────────────────────────────
+  // Audio is now carried inside WebRTC alongside video.
+  // The server only relays signaling messages — no media data passes through.
   socket.on("webrtc-offer", ({ offer }) => {
     socket.to(socket.roomCode).emit("webrtc-offer", { offer });
   });
