@@ -1,1007 +1,1398 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-<title>CincSync</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#111111">
+<title>SyncWatch</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg: #0a0a0f;
-  --surface: #13131a;
-  --surface2: #1c1c28;
-  --border: rgba(255,255,255,0.08);
-  --accent: #e8a020;
-  --accent2: #ff6b35;
-  --text: #f0ede8;
-  --text2: #8a8799;
-  --green: #4ade80;
-  --red: #f87171;
-  --radius: 16px;
-  --font-display: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
-}
-
-html, body {
-  width: 100%; height: 100%;
-  background: var(--bg); color: var(--text);
-  font-family: var(--font-display);
-  overflow: hidden;
+/* ── RESET ─────────────────────────────────────────── */
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
-  user-select: none;
+}
+html, body {
+  height: 100%; overflow: hidden;
+  background: #111;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── SCREENS ─────────────────────────────────── */
+/* ── SCREENS ────────────────────────────────────────── */
 .screen {
   position: fixed; inset: 0;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 24px;
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  display: none;
 }
-.screen.hidden { opacity: 0; pointer-events: none; transform: scale(0.97); }
+.screen.active { display: flex; }
 
-/* ── LOBBY ───────────────────────────────────── */
-#lobby { background: var(--bg); gap: 32px; }
-
-.logo-wrap { text-align: center; }
-.logo-icon { font-size: 52px; display: block; margin-bottom: 8px; animation: float 3s ease-in-out infinite; }
-@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-.logo-title {
-  font-size: 36px; font-weight: 800; letter-spacing: -1px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.logo-sub { font-size: 13px; color: var(--text2); margin-top: 4px; letter-spacing: 0.5px; }
-
-.lobby-card {
-  width: 100%; max-width: 380px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px;
-  display: flex; flex-direction: column; gap: 16px;
+/* ══════════════════════════════════════════════════════
+   JOIN SCREEN
+══════════════════════════════════════════════════════ */
+#join-screen {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 30% 20%, #2a1400 0%, #111 60%);
+  padding: 32px 24px;
+  gap: 0;
 }
 
-.btn {
-  width: 100%; padding: 16px; border-radius: 12px; border: none;
-  font-family: var(--font-display); font-size: 15px; font-weight: 700;
-  cursor: pointer; transition: all 0.2s ease; letter-spacing: 0.3px;
+.app-logo {
+  font-size: 2.4rem;
+  font-weight: 900;
+  letter-spacing: -1.5px;
+  margin-bottom: 6px;
 }
-.btn:active { transform: scale(0.97); }
-.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0a0a0f; }
-.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.app-logo .accent { color: #ff9900; }
 
-.divider { display: flex; align-items: center; gap: 12px; color: var(--text2); font-size: 12px; }
-.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-.input-group { display: flex; flex-direction: column; gap: 8px; }
-.input-label { font-size: 12px; color: var(--text2); font-weight: 600; letter-spacing: 0.5px; }
-.input-field {
-  width: 100%; padding: 14px 16px;
-  background: var(--surface2); border: 1.5px solid var(--border);
-  border-radius: 10px; color: var(--text);
-  font-family: var(--font-mono); font-size: 20px;
-  text-align: center; letter-spacing: 6px; text-transform: uppercase;
-  outline: none; transition: border-color 0.2s;
-}
-.input-field:focus { border-color: var(--accent); }
-.input-field::placeholder { letter-spacing: 2px; font-size: 14px; color: var(--text2); }
-.error-msg { color: var(--red); font-size: 13px; text-align: center; min-height: 18px; }
-
-/* ── WAITING ─────────────────────────────────── */
-#waiting { background: var(--bg); gap: 28px; }
-.waiting-card {
-  width: 100%; max-width: 380px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 28px 24px;
-  text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px;
-}
-.room-code-display {
-  font-family: var(--font-mono); font-size: 38px; font-weight: 500;
-  letter-spacing: 10px; color: var(--accent); background: var(--surface2);
-  padding: 16px 24px; border-radius: 12px; border: 1.5px dashed rgba(232,160,32,0.3);
-}
-.waiting-label { font-size: 13px; color: var(--text2); }
-.pulse-wrap { display: flex; gap: 8px; align-items: center; }
-.pulse-dot {
-  width: 8px; height: 8px; background: var(--accent); border-radius: 50%;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.pulse-dot:nth-child(2) { animation-delay: 0.2s; }
-.pulse-dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes pulse { 0%,100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
-.waiting-hint { font-size: 12px; color: var(--text2); background: var(--surface2); padding: 10px 16px; border-radius: 8px; width: 100%; }
-
-/* ── FILE PICKER ─────────────────────────────── */
-#file-picker { background: var(--bg); gap: 20px; }
-.screen-title { font-size: 22px; font-weight: 800; text-align: center; }
-.screen-subtitle { font-size: 13px; color: var(--text2); text-align: center; margin-top: -12px; }
-.file-cards { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 12px; }
-.file-card {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--radius); padding: 20px;
-  display: flex; align-items: center; gap: 16px;
-  cursor: pointer; transition: all 0.2s ease;
-}
-.file-card:active { transform: scale(0.98); }
-.file-card.selected { border-color: var(--accent); }
-.file-card-icon {
-  width: 44px; height: 44px; border-radius: 10px; background: var(--surface2);
-  display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
-}
-.file-card.selected .file-card-icon { background: rgba(232,160,32,0.15); }
-.file-card-text { flex: 1; min-width: 0; }
-.file-card-title { font-size: 14px; font-weight: 600; }
-.file-card-sub { font-size: 12px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.file-card-check {
-  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border);
-  display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
-}
-.file-card.selected .file-card-check { background: var(--accent); border-color: var(--accent); color: #0a0a0f; }
-.match-banner { width: 100%; max-width: 400px; padding: 12px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; text-align: center; display: none; }
-.match-banner.match-ok { display: block; background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3); color: var(--green); }
-.match-banner.match-fail { display: block; background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.3); color: var(--red); }
-#video-input, #sub-input { display: none; }
-
-/* ── PLAYER ──────────────────────────────────── */
-#player-screen { background: #000; padding: 0; justify-content: flex-start; align-items: flex-start; }
-#main-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
-
-#subtitle-display {
-  position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
-  width: 90%; text-align: center; font-size: 18px; font-weight: 600; color: #fff;
-  text-shadow: 0 0 4px #000, 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
-  pointer-events: none; line-height: 1.5; z-index: 10;
+.app-tagline {
+  color: #666;
+  font-size: 0.85rem;
+  margin-bottom: 40px;
+  text-align: center;
 }
 
-#controls {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  background: linear-gradient(transparent, rgba(0,0,0,0.85));
-  padding: 40px 20px 28px; z-index: 20; transition: opacity 0.3s ease;
+.join-card {
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  border-radius: 20px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-#controls.hidden { opacity: 0; pointer-events: none; }
 
-.progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-.time-label { font-family: var(--font-mono); font-size: 12px; color: rgba(255,255,255,0.8); white-space: nowrap; flex-shrink: 0; }
-.progress-wrap { flex: 1; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; position: relative; cursor: pointer; }
-.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; pointer-events: none; transition: width 0.25s linear; }
-.progress-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 14px; height: 14px; background: var(--accent); border-radius: 50%; pointer-events: none; box-shadow: 0 0 6px rgba(232,160,32,0.6); }
-.controls-row { display: flex; align-items: center; justify-content: space-between; }
-.ctrl-btn { background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; padding: 8px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.15s; }
-.ctrl-btn:active { background: rgba(255,255,255,0.15); }
-.ctrl-center { display: flex; align-items: center; gap: 20px; }
+.field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+}
+
+.text-input {
+  width: 100%;
+  background: #111;
+  border: 1.5px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 13px 16px;
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.text-input:focus { border-color: #ff9900; }
+.text-input::placeholder { color: #444; }
+
+.room-input-wrap {
+  position: relative;
+}
+.room-input-wrap .text-input {
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.btn-join {
+  width: 100%;
+  padding: 15px;
+  background: #ff9900;
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-join:active { opacity: 0.85; transform: scale(0.98); }
+
+/* ══════════════════════════════════════════════════════
+   LOBBY SCREEN
+══════════════════════════════════════════════════════ */
+#lobby-screen {
+  flex-direction: column;
+  background: #111;
+  overflow-y: auto;
+  padding: 20px 16px 32px;
+  gap: 14px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+/* Room header bar */
+.lobby-header {
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.room-code-big {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #ff9900;
+  letter-spacing: 4px;
+}
+.lobby-status-text {
+  font-size: 0.72rem;
+  color: #666;
+  margin-top: 3px;
+}
+.copy-code-btn {
+  background: #2a2a2a;
+  border: none;
+  border-radius: 10px;
+  color: #ccc;
+  font-size: 0.8rem;
+  padding: 9px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.copy-code-btn:active { background: #3a3a3a; }
+
+/* User presence dots */
+.presence-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.presence-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #333;
+  transition: background 0.3s;
+}
+.presence-dot.online { background: #4caf50; }
+.presence-label {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+/* File picker */
+.file-zone {
+  border: 2px dashed #2a2a2a;
+  border-radius: 18px;
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.25s, background 0.25s;
+  flex-shrink: 0;
+  position: relative;
+}
+.file-zone:active { border-color: #ff9900; }
+.file-zone.loaded {
+  border-style: solid;
+  border-color: #ff9900;
+  background: #1a0f00;
+}
+.file-zone-icon {
+  font-size: 2.8rem;
+  margin-bottom: 10px;
+  display: block;
+}
+.file-zone-label {
+  color: #555;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.file-zone.loaded .file-zone-label { color: #888; }
+.selected-file-name {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #ff9900;
+  font-weight: 600;
+  word-break: break-word;
+}
+.selected-file-meta {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #555;
+}
+#file-input { display: none; }
+
+/* Match status */
+.match-banner {
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-size: 0.875rem;
+  text-align: center;
+  font-weight: 500;
+  display: none;
+  flex-shrink: 0;
+}
+.match-banner.visible { display: block; }
+.match-banner.waiting {
+  background: #1c1c1c;
+  color: #666;
+  border: 1px solid #2a2a2a;
+}
+.match-banner.matched {
+  background: #0a1f0a;
+  color: #4caf50;
+  border: 1px solid #2e5c2e;
+}
+.match-banner.mismatch {
+  background: #1f0a0a;
+  color: #f44336;
+  border: 1px solid #5c2e2e;
+}
+
+/* Start button */
+.btn-start-watch {
+  width: 100%;
+  padding: 16px;
+  background: #ff9900;
+  color: #000;
+  border: none;
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: none;
+  margin-top: 4px;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+.btn-start-watch.visible { display: block; }
+.btn-start-watch:active { opacity: 0.85; }
+
+/* ══════════════════════════════════════════════════════
+   PLAYER SCREEN
+══════════════════════════════════════════════════════ */
+#player-screen {
+  flex-direction: column;
+  background: #000;
+  position: fixed; inset: 0;
+  z-index: 200;
+}
+
+#video-el {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* ── Top bar ─────────────────────────────────────────── */
+.player-topbar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%);
+  padding: 14px 16px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 20;
+  transition: opacity 0.35s;
+}
+.player-topbar.hide { opacity: 0; pointer-events: none; }
+
+.player-room-tag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ff9900;
+  letter-spacing: 1px;
+}
+.sync-badge {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(76,175,80,0.2);
+  color: #4caf50;
+  font-weight: 600;
+}
+.sync-badge.desynced {
+  background: rgba(255,152,0,0.2);
+  color: #ff9800;
+}
+.chat-open-btn {
+  background: rgba(255,255,255,0.12);
+  border: none;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #fff;
+}
+
+/* ── Touch overlay ───────────────────────────────────── */
+.touch-overlay {
+  position: absolute;
+  inset: 0;
+  bottom: 90px;
+  display: flex;
+  z-index: 10;
+}
+
+.tz { position: relative; flex: 1; }
+.tz-center { flex: 2; }
+
+/* Volume indicator bubbles */
+.vol-bubble {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.72);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.tz:first-child .vol-bubble { left: 14px; }
+.tz:last-child .vol-bubble { right: 14px; }
+.vol-bubble.show { opacity: 1; }
 
 /* Seek flash */
-.seek-flash { position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; transition: opacity 0.2s; z-index: 25; }
+.seek-flash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(255,153,0,0.15);
+  border-radius: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
 .seek-flash.show { opacity: 1; }
-#seek-left { left: 10%; } #seek-right { right: 10%; }
-.seek-flash-icon { font-size: 32px; }
-.seek-flash-label { font-size: 12px; color: #fff; font-weight: 600; background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 20px; }
 
-/* ── VOLUME ZONES — Fix 5: full height, only active on drag ─────── */
-.swipe-zone { position: absolute; top: 0; bottom: 0; width: 40%; z-index: 15; }
-#vol-zone-right { right: 0; } #vol-zone-left { left: 0; }
-.vol-indicator {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  background: rgba(0,0,0,0.65); border-radius: 12px; padding: 12px 16px;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+/* ── Bottom Controls Bar ─────────────────────────────── */
+.controls-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.90) 0%, rgba(0,0,0,0.5) 70%, transparent 100%);
+  padding: 6px 14px 18px;
+  z-index: 20;
+  transition: opacity 0.35s;
 }
-.vol-indicator.show { opacity: 1; }
-.vol-indicator-label { font-size: 11px; color: var(--text2); }
-.vol-indicator-bar { width: 8px; height: 160px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; position: relative; }
-.vol-indicator-fill { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent); border-radius: 3px; transition: height 0.1s; }
-.vol-indicator-pct { font-size: 14px; font-weight: 700; font-family: var(--font-mono); }
+.controls-bar.hide { opacity: 0; pointer-events: none; }
 
-/* Sync banner */
-#sync-banner {
-  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-  background: rgba(0,0,0,0.75); border: 1px solid var(--accent); color: var(--accent);
-  padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
-  z-index: 30; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
+/* Progress row */
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
-#sync-banner.show { opacity: 1; }
-
-/* Partner status */
-#partner-status {
-  position: absolute; top: 20px; right: 16px;
-  background: rgba(0,0,0,0.6); border-radius: 20px; padding: 6px 12px;
-  font-size: 12px; display: flex; align-items: center; gap: 6px; z-index: 30;
+.time-label {
+  font-size: 0.72rem;
+  color: #ccc;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
 }
-.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-.status-dot.offline { background: var(--red); }
+.time-label.right { text-align: right; }
 
-/* ── CALL WIDGET ─────────────────────────────── */
-#call-widget {
-  position: absolute; top: 60px; left: 12px;
-  width: 130px; border-radius: 16px; overflow: hidden;
-  background: #111; box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-  z-index: 50; touch-action: none;
-  display: none; flex-direction: column;
-  border: 1px solid rgba(255,255,255,0.12);
+.progress-track {
+  flex: 1;
+  height: 3px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+  /* bigger hit area without visual change */
+  padding: 8px 0;
+  margin: -8px 0;
 }
-/* Fix 2: shown by default when player opens */
-#call-widget.active { display: flex; }
-
-.call-videos { position: relative; width: 100%; aspect-ratio: 3/4; background: #1a1a2e; overflow: hidden; }
-
-#remote-slot { position: absolute; inset: 0; }
-#remote-slot video { width: 100%; height: 100%; object-fit: cover; }
-#remote-slot .slot-label {
-  position: absolute; top: 6px; left: 8px; font-size: 9px;
-  color: rgba(255,255,255,0.75); font-family: var(--font-mono);
-  background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 8px;
+.progress-track::after {
+  content: '';
+  position: absolute;
+  inset: 8px 0;
+  background: transparent;
+}
+.progress-fill-bar {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  height: 3px;
+  background: #ff9900;
+  border-radius: 3px;
+  pointer-events: none;
+  width: 0%;
+}
+.progress-knob {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 13px; height: 13px;
+  background: #ff9900;
+  border-radius: 50%;
+  pointer-events: none;
+  left: 0%;
+  box-shadow: 0 0 4px rgba(255,153,0,0.6);
 }
 
-/* Fix 7: local video always mirrored — JS overrides transform for rotation correction */
-#local-slot {
-  position: absolute; bottom: 8px; right: 8px; width: 38%; aspect-ratio: 1/1;
-  border-radius: 10px; overflow: hidden;
-  border: 1.5px solid rgba(255,255,255,0.35); background: #111;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+/* Buttons row */
+.buttons-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
-#local-slot video { width: 100%; height: 100%; object-fit: cover; transform-origin: center center; }
-#local-video { transform: scaleX(-1); }
-#local-slot .slot-label { position: absolute; bottom: 3px; left: 5px; font-size: 8px; color: rgba(255,255,255,0.75); font-family: var(--font-mono); }
 
-/* Fix 4: call controls hidden by default, revealed by tapping widget */
-.call-controls {
-  display: none;
-  justify-content: space-around; align-items: center;
-  padding: 8px 4px; background: rgba(0,0,0,0.85);
+.cb {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  min-width: 40px;
+  gap: 1px;
 }
-#call-widget.controls-visible .call-controls { display: flex; }
-
-.call-btn {
-  width: 32px; height: 32px; border-radius: 50%; border: none;
-  background: rgba(255,255,255,0.12); color: #fff; font-size: 14px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s;
+.cb svg { display: block; }
+.cb .cb-label {
+  font-size: 0.6rem;
+  color: #aaa;
+  font-weight: 600;
 }
-.call-btn:active { background: rgba(255,255,255,0.28); }
-.call-btn.danger { background: var(--red); }
-.call-btn.muted { background: rgba(248,113,113,0.3); }
 
-/* Resize handle — stays always visible, outside the controls bar */
-#widget-resize { position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; cursor: se-resize; z-index: 51; opacity: 0.4; }
-#widget-resize::after { content: '⠿'; position: absolute; bottom: 2px; right: 2px; font-size: 10px; color: rgba(255,255,255,0.6); }
-
-/* ── EMOJI ───────────────────────────────────── */
-#emoji-panel {
-  position: absolute; bottom: 90px; right: 16px;
-  display: flex; flex-direction: column; gap: 8px;
-  z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+/* Play/pause button — larger */
+.cb.play {
+  width: 52px; height: 52px;
+  background: rgba(255,153,0,0.15);
+  border-radius: 50%;
+  border: 2px solid rgba(255,153,0,0.4);
+  color: #ff9900;
 }
-#emoji-panel.open { opacity: 1; pointer-events: all; }
-.emoji-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.15s; }
-.emoji-btn:active { transform: scale(1.3); }
-#emoji-toggle { position: absolute; bottom: 88px; right: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 20px; cursor: pointer; display: none; align-items: center; justify-content: center; z-index: 41; }
-#emoji-toggle.active-screen { display: flex; }
-.floating-reaction { position: absolute; font-size: 36px; pointer-events: none; z-index: 60; animation: floatUp 2.5s ease-out forwards; }
-@keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-180px) scale(1.4); } }
+.cb.play svg { width: 24px; height: 24px; }
 
-/* Resync btn */
-#resync-btn {
-  position: absolute; top: 20px; left: 16px;
-  background: rgba(0,0,0,0.65); border: 1px solid rgba(232,160,32,0.4);
-  color: var(--accent); border-radius: 20px; padding: 7px 14px;
-  font-size: 12px; font-weight: 700; cursor: pointer; z-index: 30;
-  display: none; align-items: center; gap: 6px; font-family: var(--font-display);
+/* Volume section */
+.vol-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-#resync-btn.show { display: flex; }
+.vol-icon-btn {
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+}
+.mini-vol-track {
+  width: 62px;
+  height: 3px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+  padding: 7px 0;
+  margin: -7px 0;
+}
+.mini-vol-fill {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  height: 3px;
+  background: #ff9900;
+  border-radius: 3px;
+  pointer-events: none;
+  width: 100%;
+}
+
+/* ══════════════════════════════════════════════════════
+   CHAT OVERLAY
+══════════════════════════════════════════════════════ */
+.chat-panel {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.chat-panel.open { opacity: 1; pointer-events: all; }
+
+.chat-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid #2a2a2a;
+}
+.chat-title { font-weight: 700; font-size: 1rem; }
+.chat-x {
+  background: #2a2a2a;
+  border: none;
+  border-radius: 50%;
+  width: 32px; height: 32px;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.chat-msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-msg {
+  background: #1c1c1c;
+  border-radius: 12px 12px 12px 4px;
+  padding: 10px 14px;
+  max-width: 85%;
+  align-self: flex-start;
+}
+.chat-msg.mine {
+  background: #2a1800;
+  border-radius: 12px 12px 4px 12px;
+  align-self: flex-end;
+}
+.chat-sender {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #ff9900;
+  margin-bottom: 3px;
+}
+.chat-msg.mine .chat-sender { display: none; }
+.chat-text { font-size: 0.875rem; line-height: 1.4; }
+
+.chat-input-bar {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid #2a2a2a;
+}
+.chat-text-input {
+  flex: 1;
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  border-radius: 22px;
+  padding: 11px 16px;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+}
+.chat-text-input:focus { border-color: #ff9900; }
+.chat-send {
+  background: #ff9900;
+  border: none;
+  border-radius: 50%;
+  width: 42px; height: 42px;
+  color: #000;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.chat-send:active { opacity: 0.8; }
+
+/* ══════════════════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════════════════ */
+.toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30,30,30,0.95);
+  border: 1px solid #333;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 24px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, bottom 0.2s;
+  white-space: nowrap;
+  max-width: 85vw;
+  text-align: center;
+}
+.toast.show { opacity: 1; bottom: 110px; }
 </style>
 </head>
 <body>
 
-<!-- LOBBY -->
-<div id="lobby" class="screen">
-  <div class="logo-wrap">
-    <span class="logo-icon">🎬</span>
-    <div class="logo-title">CincSync</div>
-    <div class="logo-sub">Watch together. Feel together.</div>
-  </div>
-  <div class="lobby-card">
-    <button class="btn btn-primary" onclick="createRoom()">🎉 Create Room</button>
-    <div class="divider">or join with a code</div>
-    <div class="input-group">
-      <label class="input-label">ROOM CODE</label>
-      <input class="input-field" id="join-code" maxlength="6" placeholder="XXXXXX"
-        oninput="this.value=this.value.toUpperCase()"
-        onkeydown="if(event.key==='Enter')joinRoom()"/>
+<!-- ══════════════════════════════════════════════════════
+     JOIN SCREEN
+══════════════════════════════════════════════════════ -->
+<div id="join-screen" class="screen active">
+  <div class="app-logo">Sync<span class="accent">Watch</span></div>
+  <p class="app-tagline">Watch movies together. Perfectly in sync.</p>
+  <div class="join-card">
+    <div>
+      <div class="field-label">Your Name</div>
+      <input id="inp-name" class="text-input" type="text" placeholder="e.g. Bhagwan" autocomplete="off" />
     </div>
-    <button class="btn btn-secondary" onclick="joinRoom()">🚀 Join Room</button>
-    <div class="error-msg" id="lobby-error"></div>
-  </div>
-</div>
-
-<!-- WAITING -->
-<div id="waiting" class="screen hidden">
-  <div class="logo-wrap">
-    <span class="logo-icon">⏳</span>
-    <div class="logo-title">Waiting...</div>
-    <div class="logo-sub">Share this code with your friend</div>
-  </div>
-  <div class="waiting-card">
-    <div class="waiting-label">Your Room Code</div>
-    <div class="room-code-display" id="display-code">------</div>
-    <div class="pulse-wrap"><div class="pulse-dot"></div><div class="pulse-dot"></div><div class="pulse-dot"></div></div>
-    <div class="waiting-hint">💡 Tap code to copy</div>
-    <button class="btn btn-secondary" onclick="goBackToLobby()">← Back</button>
-  </div>
-</div>
-
-<!-- FILE PICKER -->
-<div id="file-picker" class="screen hidden">
-  <div class="screen-title">🍿 Select Movie</div>
-  <div class="screen-subtitle">Both devices need the same file</div>
-  <div class="file-cards">
-    <div class="file-card" id="video-card" onclick="document.getElementById('video-input').click()">
-      <div class="file-card-icon">🎬</div>
-      <div class="file-card-text">
-        <div class="file-card-title">Movie File</div>
-        <div class="file-card-sub" id="video-name">Tap to select video</div>
+    <div>
+      <div class="field-label">Room Code</div>
+      <div class="room-input-wrap">
+        <input id="inp-room" class="text-input" type="text" placeholder="e.g. MOVIE123" autocomplete="off" maxlength="12" />
       </div>
-      <div class="file-card-check" id="video-check"></div>
     </div>
-    <div class="file-card" id="sub-card" onclick="document.getElementById('sub-input').click()">
-      <div class="file-card-icon">💬</div>
-      <div class="file-card-text">
-        <div class="file-card-title">Subtitles (Optional)</div>
-        <div class="file-card-sub" id="sub-name">Tap to select .srt file</div>
-      </div>
-      <div class="file-card-check" id="sub-check"></div>
-    </div>
-    <div class="match-banner" id="match-banner"></div>
-    <button class="btn btn-primary" id="start-btn" onclick="startWatching()" disabled style="opacity:0.4;cursor:not-allowed;">▶ Start Watching</button>
+    <button class="btn-join" onclick="doJoin()">Join / Create Room →</button>
   </div>
-  <input type="file" id="video-input" accept="video/*" onchange="onVideoSelected(event)"/>
-  <input type="file" id="sub-input" accept=".srt,.vtt" onchange="onSubSelected(event)"/>
 </div>
 
-<!-- PLAYER -->
-<div id="player-screen" class="screen hidden">
+<!-- ══════════════════════════════════════════════════════
+     LOBBY SCREEN
+══════════════════════════════════════════════════════ -->
+<div id="lobby-screen" class="screen">
+  <div class="lobby-header">
+    <div>
+      <div class="room-code-big" id="lbl-room-code">—</div>
+      <div class="lobby-status-text" id="lbl-room-status">Connecting...</div>
+    </div>
+    <button class="copy-code-btn" onclick="copyCode()">📋 Copy Code</button>
+  </div>
 
-  <video id="main-video" playsinline webkit-playsinline></video>
-  <div id="subtitle-display"></div>
+  <div class="presence-row">
+    <div class="presence-dot online" id="dot-me"></div>
+    <div class="presence-dot" id="dot-peer"></div>
+    <span class="presence-label" id="lbl-presence">Waiting for friend…</span>
+  </div>
 
-  <div class="seek-flash" id="seek-left"><div class="seek-flash-icon">⏪</div><div class="seek-flash-label">-10s</div></div>
-  <div class="seek-flash" id="seek-right"><div class="seek-flash-icon">⏩</div><div class="seek-flash-label">+10s</div></div>
+  <div class="file-zone" id="file-zone" onclick="document.getElementById('file-input').click()">
+    <span class="file-zone-icon">🎬</span>
+    <div class="file-zone-label">Tap to select your movie file<br><span style="font-size:0.75rem;color:#444">Both must pick the same file</span></div>
+    <div class="selected-file-name" id="lbl-file-name"></div>
+    <div class="selected-file-meta" id="lbl-file-meta"></div>
+    <input type="file" id="file-input" accept="video/*" onchange="onFileChosen(event)" />
+  </div>
 
-  <!-- Fix 5: zones cover full height; only swipe activates volume, tap shows controls -->
-  <div class="swipe-zone" id="vol-zone-right">
-    <div class="vol-indicator" id="my-vol-indicator">
-      <div class="vol-indicator-label">MOVIE VOL</div><!-- Fix 5: renamed -->
-      <div class="vol-indicator-bar"><div class="vol-indicator-fill" id="my-vol-fill" style="height:100%"></div></div>
-      <div class="vol-indicator-pct" id="my-vol-pct">100%</div>
+  <div class="match-banner" id="match-banner"></div>
+
+  <button class="btn-start-watch" id="btn-start" onclick="enterPlayer()">▶ Start Watching</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PLAYER SCREEN
+══════════════════════════════════════════════════════ -->
+<div id="player-screen" class="screen">
+
+  <video id="video-el" playsinline preload="auto"></video>
+
+  <!-- Top bar -->
+  <div class="player-topbar" id="player-topbar">
+    <div class="player-room-tag" id="lbl-player-room">ROOM —</div>
+    <div class="sync-badge" id="sync-badge">● SYNCED</div>
+    <button class="chat-open-btn" onclick="toggleChat()">💬</button>
+  </div>
+
+  <!-- Touch zones -->
+  <div class="touch-overlay" id="touch-overlay">
+    <div class="tz" id="tz-left">
+      <div class="vol-bubble" id="bubble-peer">🎙 100%</div>
+      <div class="seek-flash" id="flash-left">◀ 10s</div>
+    </div>
+    <div class="tz tz-center" id="tz-center"></div>
+    <div class="tz" id="tz-right">
+      <div class="vol-bubble" id="bubble-movie">🔊 100%</div>
+      <div class="seek-flash" id="flash-right">10s ▶</div>
     </div>
   </div>
-  <div class="swipe-zone" id="vol-zone-left">
-    <div class="vol-indicator" id="their-vol-indicator">
-      <div class="vol-indicator-label">CALL VOL</div><!-- Fix 5: renamed -->
-      <div class="vol-indicator-bar"><div class="vol-indicator-fill" id="their-vol-fill" style="height:100%"></div></div>
-      <div class="vol-indicator-pct" id="their-vol-pct">100%</div>
-    </div>
-  </div>
 
-  <div id="sync-banner">🔄 Syncing...</div>
-
-  <div id="partner-status">
-    <div class="status-dot" id="partner-dot"></div>
-    <span id="partner-label">Partner</span>
-  </div>
-
-  <button id="resync-btn" onclick="requestResync()">🔄 Resync</button>
-
-  <div id="controls" class="hidden">
+  <!-- Bottom controls -->
+  <div class="controls-bar" id="controls-bar">
     <div class="progress-row">
-      <span class="time-label" id="time-current">0:00</span>
-      <div class="progress-wrap" id="progress-wrap">
-        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
-        <div class="progress-thumb" id="progress-thumb" style="left:0%"></div>
+      <span class="time-label" id="lbl-cur">0:00</span>
+      <div class="progress-track" id="progress-track">
+        <div class="progress-fill-bar" id="progress-fill"></div>
+        <div class="progress-knob" id="progress-knob"></div>
       </div>
-      <span class="time-label" id="time-remaining">-0:00</span>
+      <span class="time-label right" id="lbl-dur">0:00</span>
     </div>
-    <div class="controls-row">
-      <button class="ctrl-btn" onclick="toggleFullscreen()">⛶</button>
-      <div class="ctrl-center">
-        <button class="ctrl-btn" onclick="seekRelative(-10)">⏮</button>
-        <button class="ctrl-btn" id="play-pause-btn" onclick="togglePlayPause()" style="font-size:32px">▶</button>
-        <button class="ctrl-btn" onclick="seekRelative(10)">⏭</button>
+    <div class="buttons-row">
+      <!-- Volume -->
+      <div class="vol-section">
+        <button class="vol-icon-btn" id="mute-btn" onclick="toggleMute()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        <div class="mini-vol-track" id="mini-vol-track" onclick="onMiniVolClick(event)">
+          <div class="mini-vol-fill" id="mini-vol-fill"></div>
+        </div>
       </div>
-      <button class="ctrl-btn" onclick="toggleCallWidget()">📹</button>
+
+      <!-- −10s -->
+      <button class="cb" onclick="seekBy(-10)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+          <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+        </svg>
+        <span class="cb-label">10s</span>
+      </button>
+
+      <!-- Play/Pause -->
+      <button class="cb play" id="play-btn" onclick="togglePlay()">
+        <svg id="icon-play" width="24" height="24" viewBox="0 0 24 24" fill="#ff9900">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <svg id="icon-pause" width="24" height="24" viewBox="0 0 24 24" fill="#ff9900" style="display:none">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
+
+      <!-- +10s -->
+      <button class="cb" onclick="seekBy(10)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+          <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
+        </svg>
+        <span class="cb-label">10s</span>
+      </button>
+
+      <!-- Fullscreen -->
+      <button class="cb" onclick="toggleFullscreen()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </button>
     </div>
   </div>
 
-  <button id="emoji-toggle" onclick="toggleEmojiPanel()">😊</button>
-  <div id="emoji-panel">
-    <button class="emoji-btn" onclick="sendEmoji('😂')">😂</button>
-    <button class="emoji-btn" onclick="sendEmoji('😭')">😭</button>
-    <button class="emoji-btn" onclick="sendEmoji('😮')">😮</button>
-    <button class="emoji-btn" onclick="sendEmoji('❤️')">❤️</button>
-    <button class="emoji-btn" onclick="sendEmoji('🔥')">🔥</button>
-  </div>
-
-  <!-- Fix 4: controls bar hidden by default; tap video area to reveal -->
-  <div id="call-widget">
-    <div class="call-videos">
-      <div id="remote-slot">
-        <!-- NOT muted: audio comes through WebRTC -->
-        <video id="remote-video" autoplay playsinline></video>
-        <span class="slot-label">Friend</span>
-      </div>
-      <div id="local-slot">
-        <!-- muted: always — prevents echo. Fix 7: mirrored via CSS #local-video rule -->
-        <video id="local-video" autoplay playsinline muted></video>
-        <span class="slot-label">You</span>
-      </div>
+  <!-- Chat panel -->
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-titlebar">
+      <span class="chat-title">Chat</span>
+      <button class="chat-x" onclick="toggleChat()">✕</button>
     </div>
-    <!-- Fix 4: hidden by default -->
-    <div class="call-controls">
-      <button class="call-btn" id="mic-btn" onclick="toggleMic()">🎙</button>
-      <button class="call-btn danger" onclick="endCall()">📵</button>
-      <button class="call-btn" id="cam-btn" onclick="toggleCam()">📷</button>
+    <div class="chat-msgs" id="chat-msgs">
+      <div style="text-align:center;color:#444;font-size:0.8rem;margin-top:20px">Chat with your friend while watching</div>
     </div>
-    <div id="widget-resize"></div>
+    <div class="chat-input-bar">
+      <input id="chat-inp" class="chat-text-input" type="text" placeholder="Type a message…"
+             onkeydown="if(event.key==='Enter')sendMsg()" />
+      <button class="chat-send" onclick="sendMsg()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="black">
+          <line x1="22" y1="2" x2="11" y2="13" stroke="black" stroke-width="2"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2" fill="black"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
 </div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-// ═══════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════
-const state = {
-  socket: null,
-  roomCode: null,
-  isHost: false,
-  videoFile: null,
-  videoObjectUrl: null,
-  subFile: null,
-  subtitles: [],
-  myVolume: 1.0,
-  theirVolume: 1.0,
-  isMuted: false,
-  isCamOff: false,
-  localStream: null,
-  remoteStream: null,   // Fix 1: pre-built MediaStream for Firefox
-  peerConn: null,
-  controlsTimer: null,
-  syncBannerTimer: null,
-  isDraggingWidget: false,
-  isDraggingProgress: false,
-  syncStartServerTime: null,
-  syncStartVideoTime: null,
-};
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+const socket = io();
+let myName = '';
+let roomCode = '';
+let videoReady = false;
+let isSyncing = false;
+let ctrlsVisible = true;
+let ctrlsTimer = null;
+let peerVolume = 1.0;
+let movieVolume = 1.0;
+let isMuted = false;
 
-// ═══════════════════════════════════════════════
-//  SCREEN
-// ═══════════════════════════════════════════════
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
-  document.getElementById(id).classList.remove('hidden');
-  document.getElementById('emoji-toggle').classList.toggle('active-screen', id === 'player-screen');
+// WebRTC
+let pc = null;
+let localStream = null;
+let peerAudio = null;
+let isInitiator = false;
+
+const video = document.getElementById('video-el');
+
+// ════════════════════════════════════════════════════════════
+// JOIN
+// ════════════════════════════════════════════════════════════
+function doJoin() {
+  const name = document.getElementById('inp-name').value.trim();
+  const code = document.getElementById('inp-room').value.trim().toUpperCase().replace(/\s/g,'');
+  if (!name) { toast('Enter your name'); return; }
+  if (!code)  { toast('Enter a room code'); return; }
+  myName = name;
+  roomCode = code;
+  socket.emit('join-room', { roomCode, username: name });
+  showScreen('lobby-screen');
+  document.getElementById('lbl-room-code').textContent = code;
+  document.getElementById('lbl-player-room').textContent = 'ROOM ' + code;
+  document.getElementById('lbl-room-status').textContent = '1 of 2 · Share the code with your friend';
 }
 
-// ═══════════════════════════════════════════════
-//  SOCKET
-// ═══════════════════════════════════════════════
-function initSocket() {
-  if (state.socket) return;
-  state.socket = io();
-  const s = state.socket;
-
-  s.on('room-created', ({ code }) => {
-    state.roomCode = code; state.isHost = true;
-    document.getElementById('display-code').textContent = code;
-    showScreen('waiting');
-  });
-
-  s.on('room-joined', ({ code }) => {
-    state.roomCode = code; state.isHost = false;
-    showScreen('file-picker');
-    startWebRTC(false);
-  });
-
-  s.on('partner-joined', () => {
-    if (state.isHost) { showScreen('file-picker'); startWebRTC(true); }
-  });
-
-  s.on('join-error', ({ message }) => { document.getElementById('lobby-error').textContent = message; });
-
-  s.on('partner-left', () => {
-    showSyncBanner('⚠️ Partner disconnected');
-    document.getElementById('partner-dot').classList.add('offline');
-    document.getElementById('partner-label').textContent = 'Offline';
-  });
-
-  s.on('file-match-result', ({ match, files }) => {
-    const b = document.getElementById('match-banner');
-    if (match) { b.className = 'match-banner match-ok'; b.textContent = '✅ Files match! Ready to watch.'; enableStartBtn(); }
-    else { b.className = 'match-banner match-fail'; b.textContent = `⚠️ Files differ: "${files[0]}" vs "${files[1]}"`; }
-  });
-
-  s.on('remote-play',  ({ position, serverTime }) => onRemotePlay(position, serverTime));
-  s.on('remote-pause', ({ position }) => onRemotePause(position));
-  s.on('remote-seek',  ({ position }) => onRemoteSeek(position));
-  s.on('resync-state', (data) => onResyncState(data));
-  s.on('server-clock', ({ serverTime }) => onServerClock(serverTime));
-  s.on('remote-emoji', ({ emoji }) => spawnEmoji(emoji, false));
-  s.on('webrtc-offer',  ({ offer })     => onWebRTCOffer(offer));
-  s.on('webrtc-answer', ({ answer })    => onWebRTCAnswer(answer));
-  s.on('webrtc-ice',    ({ candidate }) => onWebRTCIce(candidate));
-}
-
-// ═══════════════════════════════════════════════
-//  ROOM
-// ═══════════════════════════════════════════════
-function createRoom() { initSocket(); state.socket.emit('create-room'); }
-
-function joinRoom() {
-  const code = document.getElementById('join-code').value.trim().toUpperCase();
-  if (code.length < 6) { document.getElementById('lobby-error').textContent = 'Enter a 6-character code.'; return; }
-  document.getElementById('lobby-error').textContent = '';
-  initSocket();
-  state.socket.emit('join-room', { code });
-}
-
-function goBackToLobby() { showScreen('lobby'); }
-
-document.getElementById('display-code').addEventListener('click', () => {
-  const code = document.getElementById('display-code').textContent;
-  navigator.clipboard?.writeText(code).then(() => showSyncBanner('📋 Code copied!'));
+document.getElementById('inp-room').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doJoin();
+  // Force uppercase while typing
+  e.target.value = e.target.value.toUpperCase();
 });
 
-// ═══════════════════════════════════════════════
-//  FILE PICKER
-// ═══════════════════════════════════════════════
-function onVideoSelected(e) {
-  const file = e.target.files[0]; if (!file) return;
-  state.videoFile = file;
-  document.getElementById('video-name').textContent = file.name;
-  document.getElementById('video-card').classList.add('selected');
-  document.getElementById('video-check').textContent = '✓';
-  state.socket.emit('file-info', { name: file.name, size: file.size });
-  checkReadyToStart();
+function copyCode() {
+  navigator.clipboard.writeText(roomCode).catch(() => {});
+  toast('Room code copied! Share it with your friend.');
 }
 
-function onSubSelected(e) {
-  const file = e.target.files[0]; if (!file) return;
-  state.subFile = file;
-  document.getElementById('sub-name').textContent = file.name;
-  document.getElementById('sub-card').classList.add('selected');
-  document.getElementById('sub-check').textContent = '✓';
-  const reader = new FileReader();
-  reader.onload = ev => { state.subtitles = parseSRT(ev.target.result); };
-  reader.readAsText(file);
+// ════════════════════════════════════════════════════════════
+// FILE SELECTION & MATCHING
+// ════════════════════════════════════════════════════════════
+function onFileChosen(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // Show loading state
+  const zone = document.getElementById('file-zone');
+  zone.classList.add('loaded');
+  document.getElementById('lbl-file-name').textContent = file.name;
+  document.getElementById('lbl-file-meta').textContent = fmtBytes(file.size) + ' · loading…';
+
+  // Load into video element to get duration
+  const url = URL.createObjectURL(file);
+  video.src = url;
+  video.load();
+
+  video.onloadedmetadata = () => {
+    videoReady = true;
+    const dur = video.duration;
+    document.getElementById('lbl-file-meta').textContent =
+      fmtBytes(file.size) + ' · ' + fmtTime(dur);
+    document.getElementById('lbl-dur').textContent = fmtTime(dur);
+    document.getElementById('mini-vol-fill').style.width = '100%';
+
+    socket.emit('file-info', {
+      roomCode,
+      fileInfo: {
+        size: file.size,
+        duration: Math.round(dur),
+        name: file.name
+      }
+    });
+  };
 }
 
-function checkReadyToStart() {
-  if (state.videoFile) {
-    const btn = document.getElementById('start-btn');
-    btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
-  }
-}
-function enableStartBtn() { checkReadyToStart(); }
-
-function startWatching() {
-  if (!state.videoFile) return;
-  if (state.videoObjectUrl) URL.revokeObjectURL(state.videoObjectUrl);
-  state.videoObjectUrl = URL.createObjectURL(state.videoFile);
-  const video = document.getElementById('main-video');
-  video.src = state.videoObjectUrl; video.load();
-
+// ════════════════════════════════════════════════════════════
+// ENTER PLAYER
+// ════════════════════════════════════════════════════════════
+function enterPlayer() {
   showScreen('player-screen');
-  setupPlayerEvents();
-  setupTouchGestures();
-  setupProgressDrag();
-  setupWidgetDrag();
-  setupWidgetResize();
-  startControlsTimer();
-  document.getElementById('resync-btn').classList.add('show');
-  // Fix 2: show call widget by default on entering player
-  document.getElementById('call-widget').classList.add('active');
-  if (state.subtitles.length) startSubtitleTracking();
+  initTouchOverlay();
+  initProgressBar();
+  revealControls();
+  resetCtrlTimer();
 }
 
-// ═══════════════════════════════════════════════
-//  PLAYER
-// ═══════════════════════════════════════════════
-function setupPlayerEvents() {
-  const video = document.getElementById('main-video');
-  const playBtn = document.getElementById('play-pause-btn');
-  video.addEventListener('timeupdate', updateProgressBar);
-  video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
-  video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
-  video.addEventListener('ended', () => { playBtn.textContent = '▶'; });
-  video.addEventListener('click', showControls);
-  document.getElementById('player-screen').addEventListener('click', (e) => {
-    const ids = ['controls','call-widget','emoji-panel','emoji-toggle','vol-zone-left','vol-zone-right'];
-    if (!ids.some(id => document.getElementById(id)?.contains(e.target))) showControls();
-  });
+// ════════════════════════════════════════════════════════════
+// SYNC ENGINE — world-clock based
+// ════════════════════════════════════════════════════════════
+function broadcastSync(state) {
+  const evt = {
+    roomCode,
+    state,            // 'playing' | 'paused'
+    position: video.currentTime,
+    timestamp: Date.now()   // NTP-synced device clock
+  };
+  socket.emit('sync-event', evt);
 }
 
-function updateProgressBar() {
-  const video = document.getElementById('main-video'); if (!video.duration) return;
-  const pct = (video.currentTime / video.duration) * 100;
-  document.getElementById('progress-fill').style.width = pct + '%';
-  document.getElementById('progress-thumb').style.left = pct + '%';
-  document.getElementById('time-current').textContent = formatTime(video.currentTime);
-  document.getElementById('time-remaining').textContent = '-' + formatTime(video.duration - video.currentTime);
+function applySync({ state, position, timestamp }) {
+  isSyncing = true;
+
+  // World-clock math: elapsed time since the event happened
+  const elapsed = (Date.now() - timestamp) / 1000;
+  const targetPos = state === 'playing' ? position + elapsed : position;
+
+  // Only seek if drift > 0.5s
+  if (Math.abs(video.currentTime - targetPos) > 0.5) {
+    video.currentTime = Math.max(0, targetPos);
+  }
+
+  if (state === 'playing' && video.paused) {
+    video.play().catch(() => {});
+    setPlayIcon(true);
+  } else if (state === 'paused' && !video.paused) {
+    video.pause();
+    setPlayIcon(false);
+  }
+
+  showSynced(true);
+  setTimeout(() => { isSyncing = false; }, 400);
 }
 
-function togglePlayPause() {
-  const video = document.getElementById('main-video');
-  if (video.paused) { video.play(); state.socket.emit('sync-play', { position: video.currentTime }); }
-  else { video.pause(); state.socket.emit('sync-pause', { position: video.currentTime }); }
+// Drift correction every 5 seconds (safety net)
+setInterval(() => {
+  if (!videoReady || video.paused || isSyncing) return;
+  // Visual sync confirmation — actual correction happens via applySync events
+  showSynced(true);
+}, 5000);
+
+// ════════════════════════════════════════════════════════════
+// PLAYER CONTROLS
+// ════════════════════════════════════════════════════════════
+function togglePlay() {
+  if (!videoReady) return;
+  if (video.paused) {
+    video.play().catch(() => {});
+    setPlayIcon(true);
+    broadcastSync('playing');
+  } else {
+    video.pause();
+    setPlayIcon(false);
+    broadcastSync('paused');
+  }
+  revealControls();
+  resetCtrlTimer();
 }
 
-function seekRelative(secs) {
-  const video = document.getElementById('main-video');
-  const newPos = Math.max(0, Math.min(video.duration || 0, video.currentTime + secs));
-  video.currentTime = newPos; state.socket.emit('sync-seek', { position: newPos });
-  flashSeek(secs > 0 ? 'right' : 'left');
+function seekBy(secs) {
+  if (!videoReady) return;
+  video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + secs));
+  broadcastSync(video.paused ? 'paused' : 'playing');
+  revealControls();
+  resetCtrlTimer();
 }
 
-function flashSeek(side) {
-  const el = document.getElementById('seek-' + side); el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 700);
+function toggleMute() {
+  isMuted = !isMuted;
+  video.muted = isMuted;
+  updateMuteIcon();
 }
 
 function toggleFullscreen() {
-  const el = document.getElementById('player-screen');
-  if (!document.fullscreenElement) el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
-  else document.exitFullscreen?.() || document.webkitExitFullscreen?.();
-}
-
-function showControls() {
-  const ctrl = document.getElementById('controls');
-  ctrl.classList.remove('hidden');
-  clearTimeout(state.controlsTimer);
-  state.controlsTimer = setTimeout(() => ctrl.classList.add('hidden'), 3500);
-}
-function startControlsTimer() { showControls(); }
-
-function setupProgressDrag() {
-  const wrap = document.getElementById('progress-wrap');
-  function seekTo(e) {
-    const video = document.getElementById('main-video'); if (!video.duration) return;
-    const rect = wrap.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const newPos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * video.duration;
-    video.currentTime = newPos; state.socket.emit('sync-seek', { position: newPos });
+  if (!document.fullscreenElement) {
+    document.getElementById('player-screen').requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
   }
-  wrap.addEventListener('touchstart', e => { state.isDraggingProgress = true; seekTo(e); }, { passive: true });
-  wrap.addEventListener('touchmove',  e => { if (state.isDraggingProgress) seekTo(e); }, { passive: true });
-  wrap.addEventListener('touchend',   ()  => { state.isDraggingProgress = false; });
-  wrap.addEventListener('mousedown',  e => { state.isDraggingProgress = true; seekTo(e); });
-  wrap.addEventListener('mousemove',  e => { if (state.isDraggingProgress) seekTo(e); });
-  wrap.addEventListener('mouseup',    ()  => { state.isDraggingProgress = false; });
-  wrap.addEventListener('click', seekTo);
 }
 
-// ═══════════════════════════════════════════════
-//  TOUCH GESTURES — Fix 5
-// ═══════════════════════════════════════════════
-function setupTouchGestures() {
-  // Double-tap seek: works on the player screen background
-  let lastTapTime = 0, lastTapSide = null;
-  document.getElementById('player-screen').addEventListener('touchstart', e => {
-    const side = e.touches[0].clientX < window.innerWidth / 2 ? 'left' : 'right';
-    const now = Date.now();
-    if (now - lastTapTime < 300 && side === lastTapSide) { seekRelative(side === 'right' ? 10 : -10); lastTapTime = 0; }
-    else { lastTapTime = now; lastTapSide = side; }
-  }, { passive: true });
-
-  setupVolumeSwipe('vol-zone-right', 'my');
-  setupVolumeSwipe('vol-zone-left', 'their');
+function setPlayIcon(playing) {
+  document.getElementById('icon-play').style.display = playing ? 'none' : 'block';
+  document.getElementById('icon-pause').style.display = playing ? 'block' : 'none';
 }
 
-// Fix 5: volume only on actual vertical drag; pure tap triggers showControls
-function setupVolumeSwipe(zoneId, who) {
-  const zone      = document.getElementById(zoneId);
-  const indicator = document.getElementById(who + '-vol-indicator');
-  const fill      = document.getElementById(who + '-vol-fill');
-  const pctEl     = document.getElementById(who + '-vol-pct');
-  const DRAG_THRESHOLD = 15; // px
+function updateMuteIcon() {
+  const btn = document.getElementById('mute-btn');
+  btn.innerHTML = isMuted
+    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff9900" stroke-width="2">
+         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+         <line x1="23" y1="9" x2="17" y2="15" stroke="#ff9900" stroke-width="2"></line>
+         <line x1="17" y1="9" x2="23" y2="15" stroke="#ff9900" stroke-width="2"></line>
+       </svg>`
+    : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+       </svg>`;
+}
 
-  let startY = null, startVol = 1, hasMoved = false, hideTimer = null;
+function onMiniVolClick(e) {
+  const track = document.getElementById('mini-vol-track');
+  const rect = track.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  setMovieVol(ratio);
+}
 
-  zone.addEventListener('touchstart', e => {
-    startY = e.touches[0].clientY;
-    startVol = who === 'my' ? state.myVolume : state.theirVolume;
-    hasMoved = false;
-    clearTimeout(hideTimer);
+function setMovieVol(v) {
+  movieVolume = Math.max(0, Math.min(1, v));
+  video.volume = movieVolume;
+  document.getElementById('mini-vol-fill').style.width = (movieVolume * 100) + '%';
+}
+
+// ════════════════════════════════════════════════════════════
+// PROGRESS BAR
+// ════════════════════════════════════════════════════════════
+function initProgressBar() {
+  const track = document.getElementById('progress-track');
+  let dragging = false;
+
+  track.addEventListener('touchstart', e => {
+    dragging = true;
+    seekFromTouch(e.touches[0], track);
   }, { passive: true });
 
-  zone.addEventListener('touchmove', e => {
-    if (startY === null) return;
-    const dy = startY - e.touches[0].clientY;
-    if (!hasMoved) {
-      if (Math.abs(dy) < DRAG_THRESHOLD) return; // still a potential tap
-      hasMoved = true;
-      indicator.classList.add('show');
-    }
-    const newVol = Math.max(0, Math.min(1, startVol + dy / 200));
-    if (who === 'my') {
-      state.myVolume = newVol;
-      document.getElementById('main-video').volume = newVol;
-    } else {
-      state.theirVolume = newVol;
-      const rv = document.getElementById('remote-video');
-      if (rv) rv.volume = newVol;
-    }
-    fill.style.height = (newVol * 100) + '%';
-    pctEl.textContent = Math.round(newVol * 100) + '%';
+  track.addEventListener('touchmove', e => {
+    if (dragging) seekFromTouch(e.touches[0], track);
   }, { passive: true });
 
-  zone.addEventListener('touchend', () => {
-    if (!hasMoved) {
-      // Pure tap — toggle movie controls like VLC
-      showControls();
-    } else {
-      hideTimer = setTimeout(() => indicator.classList.remove('show'), 1200);
+  track.addEventListener('touchend', () => {
+    if (dragging) {
+      dragging = false;
+      broadcastSync(video.paused ? 'paused' : 'playing');
     }
-    startY = null;
+  });
+
+  track.addEventListener('click', e => {
+    seekFromClick(e, track);
+    broadcastSync(video.paused ? 'paused' : 'playing');
   });
 }
 
-// ═══════════════════════════════════════════════
-//  SYNC ENGINE
-// ═══════════════════════════════════════════════
-function onServerClock({ serverTime }) {
-  const video = document.getElementById('main-video');
-  if (!video || video.paused || !state.syncStartServerTime) return;
-  const expected = state.syncStartVideoTime + (serverTime - state.syncStartServerTime) / 1000;
-  if (Math.abs(video.currentTime - expected) > 1.5) { video.currentTime = expected; showSyncBanner('🔄 Auto-synced'); }
-}
-function onRemotePlay(position, serverTime) {
-  const v = document.getElementById('main-video');
-  v.currentTime = position; v.play();
-  state.syncStartServerTime = serverTime; state.syncStartVideoTime = position;
-  showSyncBanner('▶ Partner pressed Play');
-}
-function onRemotePause(position) {
-  const v = document.getElementById('main-video'); v.pause(); v.currentTime = position;
-  state.syncStartServerTime = null; showSyncBanner('⏸ Partner pressed Pause');
-}
-function onRemoteSeek(position) { document.getElementById('main-video').currentTime = position; showSyncBanner('⏩ Partner seeked'); }
-function onResyncState({ playing, position, serverTime }) {
-  const v = document.getElementById('main-video');
-  if (playing) {
-    const e = (Date.now() - serverTime) / 1000; v.currentTime = position + e; v.play();
-    state.syncStartServerTime = Date.now(); state.syncStartVideoTime = v.currentTime;
-  } else { v.currentTime = position; v.pause(); }
-  showSyncBanner('✅ Resynced!');
-}
-function requestResync() { state.socket.emit('request-resync'); }
-function showSyncBanner(msg) {
-  const el = document.getElementById('sync-banner'); el.textContent = msg; el.classList.add('show');
-  clearTimeout(state.syncBannerTimer);
-  state.syncBannerTimer = setTimeout(() => el.classList.remove('show'), 2500);
+function seekFromTouch(touch, track) {
+  const r = track.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (touch.clientX - r.left) / r.width));
+  if (video.duration) video.currentTime = ratio * video.duration;
 }
 
-// ═══════════════════════════════════════════════
-//  SUBTITLES
-// ═══════════════════════════════════════════════
-function parseSRT(text) {
-  const cues = [];
-  for (const block of text.trim().split(/\n\n+/)) {
-    const lines = block.split('\n'); if (lines.length < 3) continue;
-    const m = lines[1].match(/(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/); if (!m) continue;
-    cues.push({ start: srtTime(m[1]), end: srtTime(m[2]), text: lines.slice(2).join('\n').replace(/<[^>]+>/g,'').trim() });
-  }
-  return cues;
-}
-function srtTime(t) { const p = t.replace(',','.').split(':'); return +p[0]*3600 + +p[1]*60 + +p[2]; }
-function startSubtitleTracking() {
-  const video = document.getElementById('main-video'), display = document.getElementById('subtitle-display');
-  let last = null;
-  video.addEventListener('timeupdate', () => {
-    const c = state.subtitles.find(c => video.currentTime >= c.start && video.currentTime <= c.end);
-    if (c !== last) { last = c; display.textContent = c ? c.text : ''; }
-  });
+function seekFromClick(e, track) {
+  const r = track.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  if (video.duration) video.currentTime = ratio * video.duration;
 }
 
-// ═══════════════════════════════════════════════
-//  EMOJI
-// ═══════════════════════════════════════════════
-function toggleEmojiPanel() { document.getElementById('emoji-panel').classList.toggle('open'); }
-function sendEmoji(emoji) { state.socket.emit('emoji-reaction', { emoji }); spawnEmoji(emoji, true); document.getElementById('emoji-panel').classList.remove('open'); }
-function spawnEmoji(emoji, mine) {
-  const el = document.createElement('div'); el.className = 'floating-reaction'; el.textContent = emoji;
-  el.style.bottom = '80px'; el.style.left = (mine ? 20+Math.random()*30 : 55+Math.random()*25) + '%';
-  document.getElementById('player-screen').appendChild(el);
-  setTimeout(() => el.remove(), 2600);
-}
-
-// ═══════════════════════════════════════════════
-//  CALL WIDGET DRAG + RESIZE
-// ═══════════════════════════════════════════════
-function toggleCallWidget() { document.getElementById('call-widget').classList.toggle('active'); }
-
-// Fix 4: tap widget (not its buttons) to reveal/hide controls bar
-document.getElementById('call-widget').addEventListener('click', e => {
-  if (e.target.closest('.call-controls')) return;
-  document.getElementById('call-widget').classList.toggle('controls-visible');
+video.addEventListener('timeupdate', () => {
+  if (!video.duration) return;
+  const pct = (video.currentTime / video.duration) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-knob').style.left = pct + '%';
+  document.getElementById('lbl-cur').textContent = fmtTime(video.currentTime);
 });
 
-function setupWidgetDrag() {
-  const widget = document.getElementById('call-widget');
-  let sx, sy, sl, st;
-  widget.addEventListener('touchstart', e => {
-    if (e.target.closest('.call-controls') || e.target.id === 'widget-resize') return;
-    const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
-    const r = widget.getBoundingClientRect(); sl = r.left; st = r.top;
-    state.isDraggingWidget = true;
-  }, { passive: true });
-  document.addEventListener('touchmove', e => {
-    if (!state.isDraggingWidget) return;
-    const t = e.touches[0];
-    widget.style.left = Math.max(0, Math.min(window.innerWidth  - widget.offsetWidth,  sl + t.clientX - sx)) + 'px';
-    widget.style.top  = Math.max(0, Math.min(window.innerHeight - widget.offsetHeight, st + t.clientY - sy)) + 'px';
-  }, { passive: true });
-  document.addEventListener('touchend', () => { state.isDraggingWidget = false; });
+// ════════════════════════════════════════════════════════════
+// CONTROLS VISIBILITY
+// ════════════════════════════════════════════════════════════
+function revealControls() {
+  ctrlsVisible = true;
+  document.getElementById('controls-bar').classList.remove('hide');
+  document.getElementById('player-topbar').classList.remove('hide');
 }
 
-function setupWidgetResize() {
-  const widget = document.getElementById('call-widget'), handle = document.getElementById('widget-resize');
-  let sx, sw, active = false;
-  handle.addEventListener('touchstart', e => { e.stopPropagation(); sx = e.touches[0].clientX; sw = widget.offsetWidth; active = true; }, { passive: true });
-  document.addEventListener('touchmove', e => { if (!active) return; widget.style.width = Math.max(90, Math.min(220, sw + e.touches[0].clientX - sx)) + 'px'; }, { passive: true });
-  document.addEventListener('touchend', () => { active = false; });
+function hideControls() {
+  if (video.paused) return; // never hide while paused
+  ctrlsVisible = false;
+  document.getElementById('controls-bar').classList.add('hide');
+  document.getElementById('player-topbar').classList.add('hide');
 }
 
-// ═══════════════════════════════════════════════
-//  ORIENTATION — Fix 6 (auto-fullscreen) + Fix 8 (camera rotation)
-// ═══════════════════════════════════════════════
-function getAngle() {
-  return (screen.orientation?.angle !== undefined) ? screen.orientation.angle : (window.orientation || 0);
+function resetCtrlTimer() {
+  clearTimeout(ctrlsTimer);
+  ctrlsTimer = setTimeout(hideControls, 3500);
 }
 
-// Fix 7+8: compute correct transform for local video
-// scaleX(-1) = mirror (Fix 7)
-// rotate compensates for camera not auto-rotating on Firefox Android (Fix 8)
-function applyLocalVideoTransform() {
-  const angle = getAngle();
-  const lv = document.getElementById('local-video');
-  if (angle === 90)               lv.style.transform = 'rotate(90deg) scaleX(-1)';
-  else if (angle === 270 || angle === -90) lv.style.transform = 'rotate(-90deg) scaleX(-1)';
-  else                            lv.style.transform = 'scaleX(-1)';
-}
+// ════════════════════════════════════════════════════════════
+// TOUCH GESTURE SYSTEM
+// ════════════════════════════════════════════════════════════
+function initTouchOverlay() {
+  const overlay = document.getElementById('touch-overlay');
 
-function handleOrientationChange() {
-  setTimeout(() => {
-    const angle = getAngle();
-    const landscape = (angle === 90 || angle === 270 || angle === -90);
+  const state = {}; // per touch: { startX, startY, lastY, zone, moved }
+  let tapPending = null; // for double-tap detection
 
-    // Fix 6: auto-fullscreen when landscape, exit when portrait
-    const playerEl = document.getElementById('player-screen');
-    if (landscape && !playerEl.classList.contains('hidden')) {
-      playerEl.requestFullscreen?.().catch(() => {});
-    } else if (!landscape && document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
+  overlay.addEventListener('touchstart', e => {
+    for (const t of e.changedTouches) {
+      const sw = window.innerWidth;
+      const zone = t.clientX < sw * 0.33 ? 'left'
+                 : t.clientX > sw * 0.67 ? 'right'
+                 : 'center';
+      state[t.identifier] = {
+        startX: t.clientX, startY: t.clientY,
+        lastY: t.clientY, zone, moved: false
+      };
     }
+  }, { passive: true });
 
-    // Fix 8
-    applyLocalVideoTransform();
-  }, 120);
-}
+  overlay.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      const s = state[t.identifier];
+      if (!s) continue;
+      const dy = s.lastY - t.clientY;
+      const totalDy = Math.abs(t.clientY - s.startY);
+      const totalDx = Math.abs(t.clientX - s.startX);
 
-if (screen.orientation) screen.orientation.addEventListener('change', handleOrientationChange);
-window.addEventListener('orientationchange', handleOrientationChange);
+      if (totalDy > 8) s.moved = true;
 
-// ═══════════════════════════════════════════════
-//  WEBRTC — VIDEO + AUDIO
-//
-//  Fix 1: Firefox fires ontrack once per individual track, not once for
-//         all tracks together. Pre-creating a MediaStream and adding
-//         tracks as they arrive (instead of replacing srcObject each time)
-//         ensures both video and audio reliably appear.
-//
-//  Fix 3: autoGainControl:false — AGC amplifies faint sounds including
-//         movie audio bleed, causing audible background noise during playback.
-// ═══════════════════════════════════════════════
-const ICE = { iceServers: [{ urls:'stun:stun.l.google.com:19302' },{ urls:'stun:stun1.l.google.com:19302' }] };
-
-async function startWebRTC(isOfferer) {
-  try {
-    state.localStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 320 } },
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: false,  // Fix 3: prevents amplifying movie audio bleed
+      // Vertical swipe for volume
+      if (s.moved && totalDy > totalDx) {
+        if (s.zone === 'right') {
+          setMovieVol(movieVolume + dy / 180);
+          showBubble('movie', Math.round(movieVolume * 100));
+        } else if (s.zone === 'left') {
+          peerVolume = Math.max(0, Math.min(1, peerVolume + dy / 180));
+          if (peerAudio) peerAudio.volume = peerVolume;
+          showBubble('peer', Math.round(peerVolume * 100));
+        }
       }
-    });
-
-    document.getElementById('local-video').srcObject = state.localStream;
-    applyLocalVideoTransform(); // Fix 7+8: apply mirror + rotation immediately
-
-    state.peerConn = new RTCPeerConnection(ICE);
-
-    // Fix 1: pre-create remote stream — srcObject set once, tracks added as they arrive
-    state.remoteStream = new MediaStream();
-    const rv = document.getElementById('remote-video');
-    rv.srcObject = state.remoteStream;
-    rv.volume = state.theirVolume;
-
-    // Add all local tracks (video + audio)
-    state.localStream.getTracks().forEach(t => state.peerConn.addTrack(t, state.localStream));
-
-    // Fix 1: addTrack to existing stream — works correctly in Firefox
-    state.peerConn.ontrack = e => {
-      state.remoteStream.addTrack(e.track);
-      document.getElementById('partner-dot').classList.remove('offline');
-    };
-
-    state.peerConn.onicecandidate = e => {
-      if (e.candidate) state.socket.emit('webrtc-ice', { candidate: e.candidate });
-    };
-
-    state.peerConn.oniceconnectionstatechange = () => {
-      const s = state.peerConn?.iceConnectionState;
-      const dot = document.getElementById('partner-dot');
-      if (s === 'connected' || s === 'completed') dot.classList.remove('offline');
-      else if (s === 'failed' || s === 'disconnected') dot.classList.add('offline');
-    };
-
-    if (isOfferer) {
-      // Fix 1: explicitly request audio+video receive (Firefox compatibility)
-      const offer = await state.peerConn.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-      await state.peerConn.setLocalDescription(offer);
-      state.socket.emit('webrtc-offer', { offer });
+      s.lastY = t.clientY;
     }
-  } catch (err) {
-    console.error('WebRTC error:', err);
-    showSyncBanner('⚠️ Camera/mic access denied');
+    revealControls();
+    resetCtrlTimer();
+  }, { passive: true });
+
+  overlay.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      const s = state[t.identifier];
+      if (!s) continue;
+
+      if (!s.moved) {
+        // It's a tap
+        handleTap(s.zone);
+      }
+      delete state[t.identifier];
+    }
+  }, { passive: true });
+
+  function handleTap(zone) {
+    revealControls();
+
+    if (tapPending) {
+      // Double tap
+      clearTimeout(tapPending);
+      tapPending = null;
+      if (zone === 'left')   { seekBy(-10); showFlash('left'); }
+      else if (zone === 'right') { seekBy(10); showFlash('right'); }
+      else { togglePlay(); }
+    } else {
+      tapPending = setTimeout(() => {
+        tapPending = null;
+        if (zone === 'center') {
+          if (ctrlsVisible) togglePlay();
+          // else already revealed above
+        } else {
+          resetCtrlTimer(); // single tap on sides = just show controls
+        }
+      }, 260);
+    }
   }
 }
 
-async function onWebRTCOffer(offer) {
-  if (!state.peerConn) await startWebRTC(false);
-  await state.peerConn.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await state.peerConn.createAnswer();
-  await state.peerConn.setLocalDescription(answer);
-  state.socket.emit('webrtc-answer', { answer });
-}
-async function onWebRTCAnswer(answer) { await state.peerConn.setRemoteDescription(new RTCSessionDescription(answer)); }
-async function onWebRTCIce(candidate) { try { await state.peerConn.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {} }
-
-function toggleMic() {
-  const btn = document.getElementById('mic-btn');
-  state.isMuted = !state.isMuted;
-  state.localStream?.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
-  btn.textContent = state.isMuted ? '🔇' : '🎙';
-  btn.classList.toggle('muted', state.isMuted);
-}
-function toggleCam() {
-  const btn = document.getElementById('cam-btn');
-  state.isCamOff = !state.isCamOff;
-  state.localStream?.getVideoTracks().forEach(t => t.enabled = !state.isCamOff);
-  btn.textContent = state.isCamOff ? '🚫' : '📷';
-  btn.classList.toggle('muted', state.isCamOff);
-}
-function endCall() {
-  state.peerConn?.close();
-  state.localStream?.getTracks().forEach(t => t.stop());
-  state.peerConn = null; state.localStream = null; state.remoteStream = null;
-  document.getElementById('remote-video').srcObject = null;
-  document.getElementById('local-video').srcObject = null;
-  const w = document.getElementById('call-widget');
-  w.classList.remove('active'); w.classList.remove('controls-visible');
+function showFlash(side) {
+  const el = document.getElementById(side === 'left' ? 'flash-left' : 'flash-right');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 500);
 }
 
-// ═══════════════════════════════════════════════
-//  UTILS
-// ═══════════════════════════════════════════════
-function formatTime(s) {
-  if (isNaN(s)) return '0:00';
-  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
-  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+function showBubble(type, pct) {
+  const el = document.getElementById(type === 'movie' ? 'bubble-movie' : 'bubble-peer');
+  el.textContent = (type === 'movie' ? '🔊' : '🎙') + ' ' + pct + '%';
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+// ════════════════════════════════════════════════════════════
+// SYNC STATUS BADGE
+// ════════════════════════════════════════════════════════════
+function showSynced(ok) {
+  const b = document.getElementById('sync-badge');
+  b.textContent = ok ? '● SYNCED' : '◌ SYNCING';
+  b.className = 'sync-badge' + (ok ? '' : ' desynced');
+}
+
+// ════════════════════════════════════════════════════════════
+// CHAT
+// ════════════════════════════════════════════════════════════
+function toggleChat() {
+  document.getElementById('chat-panel').classList.toggle('open');
+}
+
+function sendMsg() {
+  const inp = document.getElementById('chat-inp');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  socket.emit('chat-message', { roomCode, username: myName, message: msg });
+  appendChat(myName, msg, true);
+  inp.value = '';
+}
+
+function appendChat(sender, msg, mine) {
+  const box = document.getElementById('chat-msgs');
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (mine ? ' mine' : '');
+  div.innerHTML = `<div class="chat-sender">${escHtml(sender)}</div>
+                   <div class="chat-text">${escHtml(msg)}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ════════════════════════════════════════════════════════════
+// WebRTC AUDIO CALL
+// ════════════════════════════════════════════════════════════
+const ICE = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+]};
+
+async function startAudioCall() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    if (isInitiator) makeOffer();
+  } catch {
+    toast('Mic unavailable — voice chat disabled');
+  }
+}
+
+async function makeOffer() {
+  pc = new RTCPeerConnection(ICE);
+  wirePC();
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit('webrtc-offer', { roomCode, offer });
+}
+
+async function handleOffer(offer, from) {
+  pc = new RTCPeerConnection(ICE);
+  wirePC();
+  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  await pc.setRemoteDescription(offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('webrtc-answer', { roomCode, answer, to: from });
+}
+
+function wirePC() {
+  pc.onicecandidate = e => {
+    if (e.candidate) socket.emit('webrtc-ice', { roomCode, candidate: e.candidate });
+  };
+  pc.ontrack = e => {
+    if (!peerAudio) {
+      peerAudio = new Audio();
+      peerAudio.autoplay = true;
+    }
+    peerAudio.srcObject = e.streams[0];
+    peerAudio.volume = peerVolume;
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+// SOCKET EVENTS
+// ════════════════════════════════════════════════════════════
+socket.on('room-state', ({ userCount }) => {
+  document.getElementById('lbl-room-status').textContent =
+    userCount + '/2 · Share the room code with your friend';
+});
+
+socket.on('peer-joined', ({ username }) => {
+  toast(username + ' joined the room! 🎉');
+  document.getElementById('dot-peer').classList.add('online');
+  document.getElementById('lbl-presence').textContent = 'Both connected';
+  document.getElementById('lbl-room-status').textContent = '2/2 · Friend is here!';
+  isInitiator = true;
+  // Start audio call
+  startAudioCall();
+});
+
+socket.on('peer-left', ({ username }) => {
+  toast(username + ' left the room');
+  document.getElementById('dot-peer').classList.remove('online');
+  document.getElementById('lbl-presence').textContent = 'Waiting for friend…';
+  showSynced(false);
+});
+
+socket.on('user-count', count => {
+  document.getElementById('lbl-room-status').textContent =
+    count + '/2 · ' + (count >= 2 ? 'Friend is here!' : 'Share the code with your friend');
+  if (count >= 2) {
+    document.getElementById('dot-peer').classList.add('online');
+    document.getElementById('lbl-presence').textContent = 'Both connected';
+  }
+});
+
+socket.on('file-status', ({ status, message }) => {
+  const el = document.getElementById('match-banner');
+  el.className = 'match-banner visible ' + status;
+  el.textContent = message;
+  if (status === 'matched') {
+    document.getElementById('btn-start').classList.add('visible');
+  } else {
+    document.getElementById('btn-start').classList.remove('visible');
+  }
+});
+
+socket.on('sync-event', data => {
+  applySync(data);
+});
+
+socket.on('chat-message', ({ username, message }) => {
+  if (username !== myName) appendChat(username, message, false);
+  // Pulse chat button if panel closed
+  if (!document.getElementById('chat-panel').classList.contains('open')) {
+    const btn = document.querySelector('.chat-open-btn');
+    btn.style.background = 'rgba(255,153,0,0.35)';
+    setTimeout(() => btn.style.background = 'rgba(255,255,255,0.12)', 2000);
+  }
+});
+
+socket.on('webrtc-offer', ({ offer, from }) => {
+  const go = () => handleOffer(offer, from);
+  if (!localStream) {
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(s => { localStream = s; go(); })
+      .catch(go);
+  } else go();
+});
+
+socket.on('webrtc-answer', ({ answer }) => {
+  if (pc) pc.setRemoteDescription(answer).catch(() => {});
+});
+
+socket.on('webrtc-ice', ({ candidate }) => {
+  if (pc) pc.addIceCandidate(candidate).catch(() => {});
+});
+
+// ════════════════════════════════════════════════════════════
+// UTILITIES
+// ════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = '';
+  });
+  const target = document.getElementById(id);
+  target.classList.add('active');
+  if (id === 'player-screen') target.style.display = 'flex';
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function fmtTime(s) {
+  if (!s || isNaN(s)) return '0:00';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${sec}` : `${m}:${sec}`;
+}
+
+function fmtBytes(b) {
+  if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
+  return (b / 1e6).toFixed(1) + ' MB';
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 </script>
 </body>
