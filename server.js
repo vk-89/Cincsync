@@ -1,197 +1,152 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const path = require("path");
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: '*' }
 });
 
-// Serve frontend
-app.use(express.static(path.join(__dirname, "public")));
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── Room Storage ────────────────────────────────────────────────
-// rooms[code] = { users: [socketId, socketId], fileInfo: { name, size } per user }
+// rooms[code] = { state, position, timestamp, fileInfo, users[] }
 const rooms = {};
 
-function generateRoomCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no confusable chars
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+function getOrCreateRoom(code) {
+  if (!rooms[code]) {
+    rooms[code] = {
+      state: 'paused',
+      position: 0,
+      timestamp: Date.now(),
+      fileInfo: null,
+      users: []
+    };
   }
-  return code;
+  return rooms[code];
 }
 
-// ─── Master Clock ─────────────────────────────────────────────────
-// Every second, broadcast server timestamp to all rooms so both clients
-// can sync video position to absolute wall-clock time
-setInterval(() => {
-  const now = Date.now();
-  for (const code in rooms) {
-    io.to(code).emit("server-clock", { serverTime: now });
-  }
-}, 1000);
+io.on('connection', (socket) => {
+  let currentRoom = null;
+  let currentUser = null;
 
-// ─── Socket Events ────────────────────────────────────────────────
-io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  // ── JOIN ──────────────────────────────────────────────────
+  socket.on('join-room', ({ roomCode, username }) => {
+    currentRoom = roomCode;
+    currentUser = username;
+    socket.join(roomCode);
 
-  // ── CREATE ROOM ──────────────────────────────────────────────────
-  socket.on("create-room", () => {
-    let code;
-    // Make sure code is unique
-    do { code = generateRoomCode(); } while (rooms[code]);
+    const room = getOrCreateRoom(roomCode);
+    room.users.push({ id: socket.id, username });
 
-    rooms[code] = {
-      users: [socket.id],
-      fileInfo: {},
-      syncState: { playing: false, position: 0, updatedAt: Date.now() }
-    };
-
-    socket.join(code);
-    socket.roomCode = code;
-    console.log(`Room created: ${code} by ${socket.id}`);
-
-    socket.emit("room-created", { code });
-  });
-
-  // ── JOIN ROOM ────────────────────────────────────────────────────
-  socket.on("join-room", ({ code }) => {
-    const room = rooms[code];
-
-    if (!room) {
-      socket.emit("join-error", { message: "Room not found. Check the code." });
-      return;
-    }
-    if (room.users.length >= 2) {
-      socket.emit("join-error", { message: "Room is full. Only 2 people allowed." });
-      return;
-    }
-
-    room.users.push(socket.id);
-    socket.join(code);
-    socket.roomCode = code;
-    console.log(`${socket.id} joined room ${code}`);
-
-    // Tell the joiner current sync state
-    socket.emit("room-joined", {
-      code,
-      syncState: room.syncState
+    // Tell the joiner the current room state
+    socket.emit('room-state', {
+      state: room.state,
+      position: room.position,
+      timestamp: room.timestamp,
+      fileInfo: room.fileInfo,
+      userCount: room.users.length
     });
 
-    // Tell the creator that partner joined
-    socket.to(code).emit("partner-joined");
+    // Tell everyone else someone joined
+    socket.to(roomCode).emit('peer-joined', { username });
+    io.to(roomCode).emit('user-count', room.users.length);
+
+    console.log(`[${roomCode}] ${username} joined (${room.users.length}/2)`);
   });
 
-  // ── FILE INFO (for matching check) ───────────────────────────────
-  socket.on("file-info", ({ name, size }) => {
-    const code = socket.roomCode;
-    if (!code || !rooms[code]) return;
+  // ── FILE INFO ─────────────────────────────────────────────
+  socket.on('file-info', ({ roomCode, fileInfo }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
 
-    rooms[code].fileInfo[socket.id] = { name, size };
-    const infos = Object.values(rooms[code].fileInfo);
-
-    // Only check when both users have submitted file info
-    if (infos.length === 2) {
-      const match = infos[0].size === infos[1].size;
-      io.to(code).emit("file-match-result", {
-        match,
-        files: infos.map(f => f.name)
+    if (!room.fileInfo) {
+      // First user to submit file info
+      room.fileInfo = fileInfo;
+      socket.emit('file-status', {
+        status: 'waiting',
+        message: 'Waiting for your friend to select their file...'
       });
+    } else {
+      // Second user — compare files
+      const a = room.fileInfo;
+      const b = fileInfo;
+      const sizeMatch = a.size === b.size;
+      const durationMatch = Math.abs(a.duration - b.duration) <= 2;
+
+      if (sizeMatch && durationMatch) {
+        io.to(roomCode).emit('file-status', {
+          status: 'matched',
+          message: '✓ Files matched! Both ready to watch.'
+        });
+      } else {
+        const reason = [];
+        if (!sizeMatch) reason.push(`size differs (${formatBytes(a.size)} vs ${formatBytes(b.size)})`);
+        if (!durationMatch) reason.push(`duration differs`);
+        io.to(roomCode).emit('file-status', {
+          status: 'mismatch',
+          message: '✗ Files don\'t match — ' + reason.join(', ')
+        });
+        // Reset so they can try again
+        room.fileInfo = null;
+      }
     }
   });
 
-  // ── SYNC PLAY ─────────────────────────────────────────────────────
-  socket.on("sync-play", ({ position }) => {
-    const code = socket.roomCode;
-    if (!code || !rooms[code]) return;
+  // ── SYNC EVENT (world-clock based) ────────────────────────
+  // Payload: { roomCode, state, position, timestamp }
+  // timestamp = Date.now() on the sender's device (NTP-synced)
+  socket.on('sync-event', ({ roomCode, state, position, timestamp }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
 
-    rooms[code].syncState = { playing: true, position, updatedAt: Date.now() };
-    // Tell partner to play at this position
-    socket.to(code).emit("remote-play", { position, serverTime: Date.now() });
+    room.state = state;
+    room.position = position;
+    room.timestamp = timestamp;
+
+    // Broadcast to everyone else in the room
+    socket.to(roomCode).emit('sync-event', { state, position, timestamp });
   });
 
-  // ── SYNC PAUSE ────────────────────────────────────────────────────
-  socket.on("sync-pause", ({ position }) => {
-    const code = socket.roomCode;
-    if (!code || !rooms[code]) return;
-
-    rooms[code].syncState = { playing: false, position, updatedAt: Date.now() };
-    socket.to(code).emit("remote-pause", { position });
+  // ── CHAT ──────────────────────────────────────────────────
+  socket.on('chat-message', ({ roomCode, username, message }) => {
+    io.to(roomCode).emit('chat-message', { username, message });
   });
 
-  // ── SYNC SEEK ─────────────────────────────────────────────────────
-  socket.on("sync-seek", ({ position }) => {
-    const code = socket.roomCode;
-    if (!code || !rooms[code]) return;
-
-    rooms[code].syncState.position = position;
-    rooms[code].syncState.updatedAt = Date.now();
-    socket.to(code).emit("remote-seek", { position });
+  // ── WebRTC SIGNALING ──────────────────────────────────────
+  socket.on('webrtc-offer', ({ roomCode, offer }) => {
+    socket.to(roomCode).emit('webrtc-offer', { offer, from: socket.id });
   });
 
-  // ── RESYNC REQUEST ────────────────────────────────────────────────
-  socket.on("request-resync", () => {
-    const code = socket.roomCode;
-    if (!code || !rooms[code]) return;
-
-    const state = rooms[code].syncState;
-    socket.emit("resync-state", {
-      ...state,
-      serverTime: Date.now()
-    });
+  socket.on('webrtc-answer', ({ roomCode, answer, to }) => {
+    io.to(to).emit('webrtc-answer', { answer });
   });
 
-  // ── EMOJI REACTION ────────────────────────────────────────────────
-  socket.on("emoji-reaction", ({ emoji }) => {
-    const code = socket.roomCode;
-    if (!code) return;
-    socket.to(code).emit("remote-emoji", { emoji });
+  socket.on('webrtc-ice', ({ roomCode, candidate }) => {
+    socket.to(roomCode).emit('webrtc-ice', { candidate });
   });
 
-  // ── WEBRTC SIGNALING ──────────────────────────────────────────────
-  // Audio is now carried inside WebRTC alongside video.
-  // The server only relays signaling messages — no media data passes through.
-  socket.on("webrtc-offer", ({ offer }) => {
-    socket.to(socket.roomCode).emit("webrtc-offer", { offer });
-  });
-
-  socket.on("webrtc-answer", ({ answer }) => {
-    socket.to(socket.roomCode).emit("webrtc-answer", { answer });
-  });
-
-  socket.on("webrtc-ice", ({ candidate }) => {
-    socket.to(socket.roomCode).emit("webrtc-ice", { candidate });
-  });
-
-  // ── DISCONNECT ────────────────────────────────────────────────────
-  socket.on("disconnect", () => {
-    const code = socket.roomCode;
-    if (!code || !rooms[code]) return;
-
-    console.log(`${socket.id} disconnected from room ${code}`);
-    rooms[code].users = rooms[code].users.filter(id => id !== socket.id);
-    delete rooms[code].fileInfo[socket.id];
-
-    // Notify partner
-    socket.to(code).emit("partner-left");
-
-    // Clean up empty rooms
-    if (rooms[code].users.length === 0) {
-      delete rooms[code];
-      console.log(`Room ${code} deleted`);
+  // ── DISCONNECT ────────────────────────────────────────────
+  socket.on('disconnect', () => {
+    if (!currentRoom || !rooms[currentRoom]) return;
+    const room = rooms[currentRoom];
+    room.users = room.users.filter(u => u.id !== socket.id);
+    io.to(currentRoom).emit('user-count', room.users.length);
+    socket.to(currentRoom).emit('peer-left', { username: currentUser });
+    console.log(`[${currentRoom}] ${currentUser} left (${room.users.length} remaining)`);
+    if (room.users.length === 0) {
+      delete rooms[currentRoom];
     }
   });
 });
 
-// ─── Start Server ─────────────────────────────────────────────────
+function formatBytes(b) {
+  if (b >= 1e9) return (b / 1e9).toFixed(1) + 'GB';
+  return (b / 1e6).toFixed(0) + 'MB';
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`CincSync server running on port ${PORT}`);
+  console.log(`SyncWatch running on http://localhost:${PORT}`);
 });
