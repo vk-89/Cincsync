@@ -139,7 +139,18 @@ html, body {
    PLAYER SCREEN
 ══════════════════════════════════════════════════════ */
 #player-screen { flex-direction: column; background: #000; position: fixed; inset: 0; z-index: 200; }
-#video-el { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+#video-el {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; background: #000;
+  /* Rotation is applied via JS using data-rotation — needed for Firefox which
+     does not auto-rotate video based on track metadata like Chrome does */
+  transform-origin: center center;
+  transition: transform 0.3s;
+}
+/* Rotation states set by JS on orientation change */
+#video-el[data-rotation="90"]  { transform: rotate(90deg)  scaleX(calc(100vh / 100vw)); }
+#video-el[data-rotation="180"] { transform: rotate(180deg); }
+#video-el[data-rotation="270"] { transform: rotate(270deg) scaleX(calc(100vh / 100vw)); }
 
 /* ── Top bar ─────────────────────────────────────────── */
 .player-topbar {
@@ -263,9 +274,9 @@ html, body {
 }
 .emoji-btn:active { background: rgba(255,255,255,0.1); }
 
-/* Floating emoji reactions */
+/* Floating emoji reactions — absolute inside #player-screen so visible in fullscreen */
 .reaction-float {
-  position: fixed; pointer-events: none; font-size: 2.2rem; z-index: 999;
+  position: absolute; pointer-events: none; font-size: 2.2rem; z-index: 999;
   animation: floatUp 2.5s ease-out forwards;
 }
 @keyframes floatUp {
@@ -318,8 +329,22 @@ html, body {
   pointer-events: none;
 }
 
-/* Resize handle */
-.vc-resize-handle {
+/* Mic mute button inside vc drag bar */
+.vc-mic-btn {
+  background: none; border: none; color: rgba(255,255,255,0.8); cursor: pointer;
+  font-size: 0.85rem; padding: 2px 4px; border-radius: 6px; line-height: 1;
+  z-index: 4; position: relative;
+}
+.vc-mic-btn.muted { color: #ff4444; }
+
+/* Mic muted indicator overlay on self-video */
+.self-muted-badge {
+  position: absolute; bottom: 8px; left: 72px;
+  background: rgba(255,68,68,0.85); border-radius: 50%;
+  width: 16px; height: 16px; display: none; align-items: center; justify-content: center;
+  font-size: 0.55rem; z-index: 3;
+}
+.self-muted-badge.show { display: flex; }
   position: absolute; bottom: 0; right: 0; width: 18px; height: 18px; cursor: se-resize;
   z-index: 3; touch-action: none;
 }
@@ -594,8 +619,13 @@ html, body {
     <!-- Drag handle -->
     <div class="vc-drag-bar" id="vc-drag-bar">
       <span class="vc-cam-label" id="vc-peer-label">Friend</span>
-      <span class="vc-cam-label">You ↙</span>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <button class="vc-mic-btn" id="vc-mic-btn" onclick="toggleMicMute(event)" title="Mute mic">🎤</button>
+        <span class="vc-cam-label">You ↙</span>
+      </div>
     </div>
+    <!-- Self muted indicator -->
+    <div class="self-muted-badge" id="self-muted-badge">🔇</div>
     <!-- Waiting state (before partner connects) -->
     <div class="vc-waiting" id="vc-waiting">
       <div class="vc-wait-icon">👤</div>
@@ -632,15 +662,19 @@ let ctrlsTimer = null;
 let peerVolume = 1.0;
 let movieVolume = 1.0;
 let isMuted = false;
+let isMicMuted = false;
 let myFilePicked = false;
 let peerFilePicked = false;
 
-// WebRTC
-let pc = null;
-let localStream = null; // audio+video
-let peerAudio = null;
+// WebRTC — mesh: one RTCPeerConnection per remote peer
+// pcs[socketId] = RTCPeerConnection
+const pcs = {};
+let localStream = null;
 let isInitiator = false;
 let videoCallActive = false;
+
+// Legacy single-peer alias kept for compat
+let pc = null;
 
 const video = document.getElementById('video-el');
 const selfVideo = document.getElementById('self-video');
@@ -728,10 +762,17 @@ function enterPlayer() {
 // ════════════════════════════════════════════════════════════
 // SYNC ENGINE — world-clock based
 // ════════════════════════════════════════════════════════════
+// localActionTs: after we broadcast a sync, ignore incoming sync-events
+// for 800ms. This prevents echo-back from server causing a double-seek
+// glitch where local state looks correct but re-applying remote sync resets it.
+let localActionTs = 0;
 function broadcastSync(state) {
+  localActionTs = Date.now();
   socket.emit('sync-event', { roomCode, state, position: video.currentTime, timestamp: Date.now() });
 }
 function applySync({ state, position, timestamp }) {
+  // Ignore if we just triggered a local action — prevents echo-back glitch
+  if (Date.now() - localActionTs < 800) return;
   isSyncing = true;
   const elapsed = (Date.now() - timestamp) / 1000;
   const targetPos = state === 'playing' ? position + elapsed : position;
@@ -874,8 +915,7 @@ function initTouchOverlay() {
           showVlcBubble('movie', movieVolume);
         } else if (s.zone === 'left') {
           peerVolume = Math.max(0, Math.min(1, peerVolume + dy / 180));
-          const peerAudioEl = document.getElementById('peer-audio-el');
-          if (peerAudioEl) peerAudioEl.volume = peerVolume;
+          Object.values(peerAudioEls).forEach(a => { a.volume = peerVolume; });
           showVlcBubble('peer', peerVolume);
         }
       }
@@ -973,12 +1013,27 @@ function spawnReaction(emoji, isMine) {
   const x = isMine ? (20 + Math.random() * 30) : (50 + Math.random() * 30);
   el.style.left = x + 'vw';
   el.style.bottom = '120px';
-  document.body.appendChild(el);
+  // Append inside player-screen so reactions show in fullscreen mode
+  // (fullscreen stacking context contains player-screen, not body)
+  const container = document.getElementById('player-screen');
+  container.appendChild(el);
   setTimeout(() => el.remove(), 2600);
 }
 
 // ════════════════════════════════════════════════════════════
-// VIDEO CALL (WebRTC audio+video)
+// VIDEO CALL (WebRTC — mesh topology, Firefox-safe audio)
+//
+// FIREFOX AUDIO BUG NOTE (logged for future context):
+// Firefox's Gecko/Cubeb audio engine handles composite streams differently.
+// Assigning a full stream (with audio) to peerVideo.srcObject — even with
+// peerVideo.muted=true — causes Firefox to allocate audio processing for
+// that element. Simultaneously routing the same audio track to a separate
+// <audio> element splits the pipeline, bypasses hardware AEC, and produces
+// static/feedback loops.
+// FIX 1: Wrap only the video track in a new MediaStream before assigning
+//         to the muted video element: peerVideo.srcObject = new MediaStream([videoTrack])
+// FIX 2: Enforce explicit getUserMedia constraints so Firefox uses hardware AEC:
+//         { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
 // ════════════════════════════════════════════════════════════
 const ICE = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -986,18 +1041,28 @@ const ICE = { iceServers: [
   { urls: 'stun:stun2.l.google.com:19302' }
 ]};
 
+// Explicit audio constraints — prevents Firefox from using raw audio pipeline
+const MEDIA_CONSTRAINTS = {
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  video: { facingMode: 'user' }
+};
+
+// Per-peer audio elements (one per remote user for mesh)
+const peerAudioEls = {};
+
 async function toggleVideoCall() {
   const btn = document.getElementById('cam-toggle-btn');
   const container = document.getElementById('videocall-container');
   if (!videoCallActive) {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } });
+      localStream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTRAINTS);
       selfVideo.srcObject = localStream;
       container.classList.add('visible');
       btn.classList.add('active');
       videoCallActive = true;
       initDragResize();
-      if (isInitiator) makeOffer();
+      // Offer to all existing peers
+      socket.emit('request-peer-ids', { roomCode });
     } catch(err) {
       toast('Camera/mic unavailable: ' + err.message);
     }
@@ -1010,82 +1075,111 @@ async function toggleVideoCall() {
 function stopVideoCall() {
   videoCallActive = false;
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-  if (pc) { pc.close(); pc = null; }
+  Object.values(pcs).forEach(p => p.close());
+  Object.keys(pcs).forEach(k => delete pcs[k]);
+  pc = null;
   selfVideo.srcObject = null;
   peerVideo.srcObject = null;
-  const peerAudioEl = document.getElementById('peer-audio-el');
-  if (peerAudioEl) { peerAudioEl.srcObject = null; }
+  Object.values(peerAudioEls).forEach(a => { a.srcObject = null; a.remove(); });
+  Object.keys(peerAudioEls).forEach(k => delete peerAudioEls[k]);
   document.getElementById('videocall-container').classList.remove('visible');
   document.getElementById('vc-waiting').classList.remove('hide');
 }
 
-async function makeOffer() {
-  pc = new RTCPeerConnection(ICE);
-  wirePC();
-  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit('webrtc-offer', { roomCode, offer });
+// Mic mute toggle
+function toggleMicMute(e) {
+  if (e) e.stopPropagation();
+  isMicMuted = !isMicMuted;
+  if (localStream) {
+    localStream.getAudioTracks().forEach(t => { t.enabled = !isMicMuted; });
+  }
+  const btn = document.getElementById('vc-mic-btn');
+  const badge = document.getElementById('self-muted-badge');
+  if (isMicMuted) {
+    btn.textContent = '🔇'; btn.classList.add('muted');
+    badge.classList.add('show');
+  } else {
+    btn.textContent = '🎤'; btn.classList.remove('muted');
+    badge.classList.remove('show');
+  }
+}
+
+async function createPeerConnection(peerId, initiator) {
+  if (pcs[peerId]) { pcs[peerId].close(); }
+  const newPc = new RTCPeerConnection(ICE);
+  pcs[peerId] = newPc;
+  pc = newPc; // keep legacy alias pointing to last-created pc
+
+  if (localStream) localStream.getTracks().forEach(t => newPc.addTrack(t, localStream));
+
+  newPc.onicecandidate = e => {
+    if (e.candidate) socket.emit('webrtc-ice', { roomCode, candidate: e.candidate, to: peerId });
+  };
+
+  newPc.ontrack = e => {
+    const track = e.track;
+    if (track.kind === 'video') {
+      // FIX 1: Isolate video track — never assign composite stream to video element
+      document.getElementById('vc-waiting').classList.add('hide');
+      peerVideo.srcObject = new MediaStream([track]);
+      peerVideo.muted = true;
+      document.getElementById('videocall-container').classList.add('visible');
+    } else if (track.kind === 'audio') {
+      // FIX 2: Dedicate a separate <audio> element per peer for clean AEC pipeline
+      if (!peerAudioEls[peerId]) {
+        const audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        peerAudioEls[peerId] = audioEl;
+      }
+      peerAudioEls[peerId].srcObject = new MediaStream([track]);
+      peerAudioEls[peerId].volume = peerVolume;
+      peerAudioEls[peerId].play().catch(() => {
+        const resume = () => peerAudioEls[peerId] && peerAudioEls[peerId].play().catch(() => {});
+        document.addEventListener('click', resume, { once: true });
+        document.addEventListener('touchend', resume, { once: true });
+      });
+    }
+  };
+
+  newPc.onconnectionstatechange = () => {
+    const state = newPc.connectionState;
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+      delete pcs[peerId];
+      if (peerAudioEls[peerId]) { peerAudioEls[peerId].srcObject = null; peerAudioEls[peerId].remove(); delete peerAudioEls[peerId]; }
+      if (Object.keys(pcs).length === 0) {
+        document.getElementById('vc-waiting').classList.remove('hide');
+        peerVideo.srcObject = null;
+      }
+    }
+  };
+
+  if (initiator) {
+    const offer = await newPc.createOffer();
+    await newPc.setLocalDescription(offer);
+    socket.emit('webrtc-offer', { roomCode, offer, to: peerId });
+  }
+  return newPc;
 }
 
 async function handleOffer(offer, from) {
-  pc = new RTCPeerConnection(ICE);
-  wirePC();
-  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  else {
-    // Try to get camera if not yet started
+  // If we don't have a stream yet, try to get one (call auto-accept)
+  if (!localStream) {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } });
+      localStream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTRAINTS);
       selfVideo.srcObject = localStream;
       document.getElementById('videocall-container').classList.add('visible');
       document.getElementById('cam-toggle-btn').classList.add('active');
       videoCallActive = true;
       initDragResize();
-      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-    } catch(e) {}
+    } catch(e) { /* camera denied — still handle signaling */ }
   }
-  await pc.setRemoteDescription(offer);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
+  const newPc = await createPeerConnection(from, false);
+  await newPc.setRemoteDescription(offer);
+  const answer = await newPc.createAnswer();
+  await newPc.setLocalDescription(answer);
   socket.emit('webrtc-answer', { roomCode, answer, to: from });
-}
-
-function wirePC() {
-  pc.onicecandidate = e => {
-    if (e.candidate) socket.emit('webrtc-ice', { roomCode, candidate: e.candidate });
-  };
-  pc.ontrack = e => {
-    const stream = e.streams[0];
-    const track = e.track;
-
-    if (track.kind === 'video') {
-      // Show partner's video stream (muted — audio comes from separate audio element)
-      document.getElementById('vc-waiting').classList.add('hide');
-      peerVideo.srcObject = stream;
-      peerVideo.muted = true; // MUST be muted to avoid double audio
-      document.getElementById('videocall-container').classList.add('visible');
-    } else if (track.kind === 'audio') {
-      // Route audio through a dedicated <audio> element — works in Firefox
-      // (Firefox blocks autoplay on video elements with audio unless muted)
-      const peerAudioEl = document.getElementById('peer-audio-el');
-      // Build an audio-only stream from just the audio track
-      const audioStream = new MediaStream([track]);
-      peerAudioEl.srcObject = audioStream;
-      peerAudioEl.volume = peerVolume;
-      peerAudioEl.play().catch(() => {
-        // Autoplay blocked — will play on next user interaction
-        document.addEventListener('click', () => peerAudioEl.play().catch(() => {}), { once: true });
-        document.addEventListener('touchend', () => peerAudioEl.play().catch(() => {}), { once: true });
-      });
-    }
-  };
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-      document.getElementById('vc-waiting').classList.remove('hide');
-      peerVideo.srcObject = null;
-      document.getElementById('peer-audio-el').srcObject = null;
-    }
-  };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1186,14 +1280,33 @@ function initDragResize() {
 }
 
 // ════════════════════════════════════════════════════════════
-// SCREEN ORIENTATION — fix video orientation
+// SCREEN ORIENTATION — fix video orientation for Firefox
+// Firefox does not auto-rotate video based on track metadata.
+// We read screen.orientation.angle and apply a CSS rotation
+// to #video-el via a data-rotation attribute.
 // ════════════════════════════════════════════════════════════
 function handleOrientationChange() {
-  // Force re-layout — CSS handles most of this, but we nudge the videos
-  const angle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
-  // Apply CSS transform to correct mirrored selfie in any orientation
-  // The player video needs no rotation correction (the browser handles it for file playback)
-  // selfVideo always mirrors (front cam)
+  const angle = (screen.orientation && screen.orientation.angle != null)
+    ? screen.orientation.angle
+    : (window.orientation || 0);
+
+  const videoEl = document.getElementById('video-el');
+  // Only apply rotation correction in Firefox (other browsers handle it natively)
+  const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+  if (isFirefox) {
+    // Map device orientation angle to required video rotation to appear upright
+    // angle=0 → portrait normal → no rotation needed
+    // angle=90 → landscape left → rotate 90
+    // angle=180 → portrait flipped → rotate 180
+    // angle=270 → landscape right → rotate 270
+    const rot = (360 - angle) % 360; // counter-rotate to compensate
+    if (rot === 0) videoEl.removeAttribute('data-rotation');
+    else videoEl.setAttribute('data-rotation', String(rot));
+  } else {
+    videoEl.removeAttribute('data-rotation');
+  }
+
+  // Self/peer camera — always mirror (front cam)
   selfVideo.style.transform = 'scaleX(-1)';
   peerVideo.style.transform = 'scaleX(-1)';
 }
@@ -1208,40 +1321,52 @@ handleOrientationChange();
 // SOCKET EVENTS
 // ════════════════════════════════════════════════════════════
 socket.on('room-state', ({ userCount }) => {
-  document.getElementById('lbl-room-status').textContent = userCount + '/2 · Share the room code with your friend';
+  document.getElementById('lbl-room-status').textContent = userCount + ' in room · Share the code';
 });
-socket.on('peer-joined', ({ username }) => {
+socket.on('peer-joined', ({ username, socketId }) => {
   toast(username + ' joined the room! 🎉');
   document.getElementById('dot-peer').classList.add('online');
-  document.getElementById('lbl-presence').textContent = 'Both connected';
-  document.getElementById('lbl-room-status').textContent = '2/2 · Friend is here!';
+  document.getElementById('lbl-presence').textContent = username + ' is here';
+  document.getElementById('lbl-room-status').textContent = 'Friend is here!';
   document.getElementById('vc-peer-label').textContent = username;
-  isInitiator = true;
-  peerFilePicked = false; // reset, they'll send file-info soon
+  peerFilePicked = false;
+  // If we're in a call, offer to the new peer
+  if (videoCallActive && socketId) {
+    createPeerConnection(socketId, true);
+  }
 });
-socket.on('peer-left', ({ username }) => {
+socket.on('peer-ids', ({ ids }) => {
+  // Response to request-peer-ids: make offer to each existing peer
+  ids.forEach(id => { if (videoCallActive) createPeerConnection(id, true); });
+});
+socket.on('peer-left', ({ username, socketId }) => {
   toast(username + ' left the room');
   document.getElementById('dot-peer').classList.remove('online');
   document.getElementById('lbl-presence').textContent = 'Waiting for friend…';
   showSynced(false);
-  document.getElementById('vc-waiting').classList.remove('hide');
-  peerVideo.srcObject = null;
-  const peerAudioEl = document.getElementById('peer-audio-el');
-  if (peerAudioEl) peerAudioEl.srcObject = null;
+  if (socketId && pcs[socketId]) { pcs[socketId].close(); delete pcs[socketId]; }
+  if (socketId && peerAudioEls[socketId]) {
+    peerAudioEls[socketId].srcObject = null;
+    peerAudioEls[socketId].remove();
+    delete peerAudioEls[socketId];
+  }
+  if (Object.keys(pcs).length === 0) {
+    document.getElementById('vc-waiting').classList.remove('hide');
+    peerVideo.srcObject = null;
+  }
 });
 socket.on('user-count', count => {
   document.getElementById('lbl-room-status').textContent =
-    count + '/2 · ' + (count >= 2 ? 'Friend is here!' : 'Share the code with your friend');
+    count + ' in room · ' + (count >= 2 ? 'Friends are here!' : 'Share the code');
   if (count >= 2) {
     document.getElementById('dot-peer').classList.add('online');
-    document.getElementById('lbl-presence').textContent = 'Both connected';
+    document.getElementById('lbl-presence').textContent = 'Others connected';
   }
 });
 socket.on('file-status', ({ status, message }) => {
   const el = document.getElementById('match-banner');
   el.className = 'match-banner visible ' + status;
   el.textContent = message;
-  // Hide the waiting banner
   document.getElementById('partner-wait-banner').classList.remove('show');
   if (status === 'matched') {
     document.getElementById('btn-start').classList.add('visible');
@@ -1249,38 +1374,32 @@ socket.on('file-status', ({ status, message }) => {
     document.getElementById('btn-start').classList.remove('visible');
   }
   if (status === 'waiting') {
-    // Server says we're first — keep showing wait banner
     document.getElementById('partner-wait-banner').classList.add('show');
   }
 });
 socket.on('peer-file-info', ({ fileInfo }) => {
   peerFilePicked = true;
   if (myFilePicked) document.getElementById('partner-wait-banner').classList.remove('show');
-  // Show peer's file info in the lobby
   document.getElementById('peer-fz-icon').style.display = 'none';
   document.getElementById('peer-file-name').textContent = fileInfo.name;
   document.getElementById('peer-file-meta').textContent =
     fmtBytes(fileInfo.size) + ' · ' + fmtTime(fileInfo.duration);
-  // Try to generate a thumbnail-like frame from the filename extension as a visual cue
-  // (we can't load their actual file, so just show a movie frame placeholder)
   const wrap = document.getElementById('peer-thumb-wrap');
-  // Can't load peer's local file, so show a styled placeholder instead
   wrap.innerHTML = `<div style="width:100%;height:100px;background:linear-gradient(135deg,#1a1a1a,#2a2a2a);display:flex;align-items:center;justify-content:center;font-size:2.5rem;border-radius:10px;">🎬</div>`;
   wrap.classList.add('show');
 });
 socket.on('sync-event', data => { applySync(data); });
 socket.on('reaction', ({ emoji }) => { spawnReaction(emoji, false); });
 
-socket.on('webrtc-offer', ({ offer, from }) => {
-  if (!localStream) {
-    // Peer started call, auto-accept (will prompt for camera)
-    handleOffer(offer, from);
-  } else {
-    handleOffer(offer, from);
-  }
+socket.on('webrtc-offer', ({ offer, from }) => { handleOffer(offer, from); });
+socket.on('webrtc-answer', ({ answer, from }) => {
+  const targetPc = pcs[from];
+  if (targetPc) targetPc.setRemoteDescription(answer).catch(() => {});
 });
-socket.on('webrtc-answer', ({ answer }) => { if (pc) pc.setRemoteDescription(answer).catch(() => {}); });
-socket.on('webrtc-ice', ({ candidate }) => { if (pc) pc.addIceCandidate(candidate).catch(() => {}); });
+socket.on('webrtc-ice', ({ candidate, from }) => {
+  const targetPc = pcs[from];
+  if (targetPc) targetPc.addIceCandidate(candidate).catch(() => {});
+});
 
 // ════════════════════════════════════════════════════════════
 // UTILITIES
