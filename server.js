@@ -61,15 +61,16 @@ io.on('connection', (socket) => {
     const room = rooms[roomCode];
     if (!room) return;
 
+    // Always broadcast to peer so they can show the thumbnail name/meta
+    socket.to(roomCode).emit('peer-file-info', { fileInfo });
+
     if (!room.fileInfo) {
-      // First user to submit file info
       room.fileInfo = fileInfo;
       socket.emit('file-status', {
         status: 'waiting',
         message: 'Waiting for your friend to select their file...'
       });
     } else {
-      // Second user — compare files
       const a = room.fileInfo;
       const b = fileInfo;
       const sizeMatch = a.size === b.size;
@@ -88,7 +89,6 @@ io.on('connection', (socket) => {
           status: 'mismatch',
           message: '✗ Files don\'t match — ' + reason.join(', ')
         });
-        // Reset so they can try again
         room.fileInfo = null;
       }
     }
@@ -112,6 +112,11 @@ io.on('connection', (socket) => {
   // ── CHAT ──────────────────────────────────────────────────
   socket.on('chat-message', ({ roomCode, username, message }) => {
     io.to(roomCode).emit('chat-message', { username, message });
+  });
+
+  // ── REACTION ──────────────────────────────────────────────
+  socket.on('reaction', ({ roomCode, emoji }) => {
+    socket.to(roomCode).emit('reaction', { emoji });
   });
 
   // ── WebRTC SIGNALING ──────────────────────────────────────
