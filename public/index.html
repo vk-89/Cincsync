@@ -405,9 +405,6 @@ html, body {
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════
-     JOIN SCREEN
-══════════════════════════════════════════════════════ -->
 <div id="join-screen" class="screen active">
   <div class="app-logo">Sync<span class="accent">Watch</span></div>
   <p class="app-tagline">Watch movies together. Perfectly in sync.</p>
@@ -426,9 +423,6 @@ html, body {
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════
-     LOBBY SCREEN
-══════════════════════════════════════════════════════ -->
 <div id="lobby-screen" class="screen">
   <div class="lobby-header">
     <div>
@@ -445,7 +439,6 @@ html, body {
   </div>
 
   <div class="file-zone" id="file-zone" onclick="document.getElementById('file-input').click()">
-    <!-- Thumbnail of selected video -->
     <div class="file-thumb-wrap" id="file-thumb-wrap">
       <video id="thumb-video" muted preload="metadata" playsinline></video>
       <div class="file-thumb-overlay"></div>
@@ -457,13 +450,11 @@ html, body {
     <input type="file" id="file-input" accept="video/*" onchange="onFileChosen(event)" />
   </div>
 
-  <!-- Waiting for partner to pick file -->
   <div class="partner-wait-banner" id="partner-wait-banner">
     <div class="wait-spinner"></div>
     <span class="wait-text">Waiting for your friend to select their file…</span>
   </div>
 
-  <!-- Partner's file thumbnail -->
   <div class="peer-file-zone" id="peer-file-zone">
     <div class="peer-file-zone-header">🤝 Friend's File</div>
     <div class="peer-file-thumb-wrap" id="peer-thumb-wrap">
@@ -479,13 +470,9 @@ html, body {
   <button class="btn-start-watch" id="btn-start" onclick="enterPlayer()">▶ Start Watching</button>
 </div>
 
-<!-- ══════════════════════════════════════════════════════
-     PLAYER SCREEN
-══════════════════════════════════════════════════════ -->
 <div id="player-screen" class="screen">
   <video id="video-el" playsinline preload="auto"></video>
 
-  <!-- Top bar -->
   <div class="player-topbar" id="player-topbar">
     <div class="player-room-tag" id="lbl-player-room">ROOM —</div>
     <div class="sync-badge" id="sync-badge">● SYNCED</div>
@@ -495,10 +482,8 @@ html, body {
     </div>
   </div>
 
-  <!-- Touch zones -->
   <div class="touch-overlay" id="touch-overlay">
     <div class="tz" id="tz-left">
-      <!-- VLC-style peer volume indicator -->
       <div class="vlc-vol-indicator" id="vlc-peer">
         <div class="vlc-vol-bar-track"><div class="vlc-vol-bar-fill" id="vlc-peer-fill" style="height:100%"></div></div>
         <div class="vlc-vol-icon">🎙</div>
@@ -508,7 +493,6 @@ html, body {
     </div>
     <div class="tz tz-center" id="tz-center"></div>
     <div class="tz" id="tz-right">
-      <!-- VLC-style movie volume indicator -->
       <div class="vlc-vol-indicator" id="vlc-movie">
         <div class="vlc-vol-bar-track"><div class="vlc-vol-bar-fill" id="vlc-movie-fill" style="height:100%"></div></div>
         <div class="vlc-vol-icon">🔊</div>
@@ -518,7 +502,6 @@ html, body {
     </div>
   </div>
 
-  <!-- Bottom controls -->
   <div class="controls-bar" id="controls-bar">
     <div class="progress-row">
       <span class="time-label" id="lbl-cur">0:00</span>
@@ -529,7 +512,6 @@ html, body {
       <span class="time-label right" id="lbl-dur">0:00</span>
     </div>
     <div class="buttons-row">
-      <!-- Volume -->
       <div class="vol-section">
         <button class="vol-icon-btn" id="mute-btn" onclick="toggleMute()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -542,28 +524,24 @@ html, body {
           <div class="mini-vol-knob" id="mini-vol-knob"></div>
         </div>
       </div>
-      <!-- −10s -->
       <button class="cb" onclick="seekBy(-10)">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
           <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
         </svg>
         <span class="cb-label">10s</span>
       </button>
-      <!-- Play/Pause -->
       <button class="cb play" id="play-btn" onclick="togglePlay()">
         <svg id="icon-play" width="24" height="24" viewBox="0 0 24 24" fill="#ff9900"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         <svg id="icon-pause" width="24" height="24" viewBox="0 0 24 24" fill="#ff9900" style="display:none">
           <rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>
         </svg>
       </button>
-      <!-- +10s -->
       <button class="cb" onclick="seekBy(10)">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
           <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
         </svg>
         <span class="cb-label">10s</span>
       </button>
-      <!-- Fullscreen -->
       <button class="cb" onclick="toggleFullscreen()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
           <polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline>
@@ -573,7 +551,6 @@ html, body {
     </div>
   </div>
 
-  <!-- Emoji panel -->
   <div class="emoji-panel" id="emoji-panel">
     <button class="emoji-btn" onclick="sendReaction('❤️')">❤️</button>
     <button class="emoji-btn" onclick="sendReaction('😂')">😂</button>
@@ -589,32 +566,22 @@ html, body {
     <button class="emoji-btn" onclick="sendReaction('😍')">😍</button>
   </div>
 
-  <!-- Video call container (draggable + resizable) -->
   <div id="videocall-container">
-    <!-- Drag handle -->
     <div class="vc-drag-bar" id="vc-drag-bar">
       <span class="vc-cam-label" id="vc-peer-label">Friend</span>
       <span class="vc-cam-label">You ↙</span>
     </div>
-    <!-- Waiting state (before partner connects) -->
     <div class="vc-waiting" id="vc-waiting">
       <div class="vc-wait-icon">👤</div>
       <div class="vc-wait-text">Waiting for friend's camera…</div>
     </div>
-    <!-- Partner video (always muted — audio comes from peer-audio-el to fix Firefox) -->
-    <video id="peer-video" playsinline autoplay muted></video>
-    <!-- Self video PIP -->
+    <video id="peer-video" playsinline></video>
     <video id="self-video" playsinline autoplay muted></video>
-    <!-- Resize handle -->
     <div class="vc-resize-handle" id="vc-resize-handle"></div>
   </div>
 
 </div>
 
-<!-- Hidden peer audio element (Firefox-safe: audio element avoids video autoplay restrictions) -->
-<audio id="peer-audio-el" autoplay playsinline style="display:none"></audio>
-
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -638,7 +605,6 @@ let peerFilePicked = false;
 // WebRTC
 let pc = null;
 let localStream = null; // audio+video
-let peerAudio = null;
 let isInitiator = false;
 let videoCallActive = false;
 
@@ -874,8 +840,7 @@ function initTouchOverlay() {
           showVlcBubble('movie', movieVolume);
         } else if (s.zone === 'left') {
           peerVolume = Math.max(0, Math.min(1, peerVolume + dy / 180));
-          const peerAudioEl = document.getElementById('peer-audio-el');
-          if (peerAudioEl) peerAudioEl.volume = peerVolume;
+          peerVideo.volume = peerVolume;
           showVlcBubble('peer', peerVolume);
         }
       }
@@ -1016,8 +981,6 @@ function stopVideoCall() {
   if (pc) { pc.close(); pc = null; }
   selfVideo.srcObject = null;
   peerVideo.srcObject = null;
-  const peerAudioEl = document.getElementById('peer-audio-el');
-  if (peerAudioEl) { peerAudioEl.srcObject = null; }
   document.getElementById('videocall-container').classList.remove('visible');
   document.getElementById('vc-waiting').classList.remove('hide');
 }
@@ -1060,36 +1023,31 @@ function wirePC() {
   pc.onicecandidate = e => {
     if (e.candidate) socket.emit('webrtc-ice', { roomCode, candidate: e.candidate });
   };
+  
   pc.ontrack = e => {
-    const stream = e.streams[0];
-    const track = e.track;
-
-    if (track.kind === 'video') {
-      // Show partner's video stream (muted — audio comes from separate audio element)
+    // Only assign the stream once to the video element
+    if (!peerVideo.srcObject) {
       document.getElementById('vc-waiting').classList.add('hide');
-      peerVideo.srcObject = new MediaStream([track]);
-      peerVideo.muted = true; // MUST be muted to avoid double audio
+      peerVideo.srcObject = e.streams[0];
+      
+      // CRITICAL: Unmute the video element so audio routes natively through the WebRTC pipeline
+      peerVideo.muted = false; 
+      peerVideo.volume = peerVolume;
+      
       document.getElementById('videocall-container').classList.add('visible');
-    } else if (track.kind === 'audio') {
-      // Route audio through a dedicated <audio> element — works in Firefox
-      // (Firefox blocks autoplay on video elements with audio unless muted)
-      const peerAudioEl = document.getElementById('peer-audio-el');
-      // Build an audio-only stream from just the audio track
-      const audioStream = new MediaStream([track]);
-      peerAudioEl.srcObject = audioStream;
-      peerAudioEl.volume = peerVolume;
-      peerAudioEl.play().catch(() => {
-        // Autoplay blocked — will play on next user interaction
-        document.addEventListener('click', () => peerAudioEl.play().catch(() => {}), { once: true });
-        document.addEventListener('touchend', () => peerAudioEl.play().catch(() => {}), { once: true });
+      
+      // Handle Firefox's autoplay policy via promise catch rather than media splitting
+      peerVideo.play().catch(() => {
+        document.addEventListener('click', () => peerVideo.play().catch(() => {}), { once: true });
+        document.addEventListener('touchend', () => peerVideo.play().catch(() => {}), { once: true });
       });
     }
   };
+  
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
       document.getElementById('vc-waiting').classList.remove('hide');
       peerVideo.srcObject = null;
-      document.getElementById('peer-audio-el').srcObject = null;
     }
   };
 }
@@ -1232,8 +1190,6 @@ socket.on('peer-left', ({ username }) => {
   showSynced(false);
   document.getElementById('vc-waiting').classList.remove('hide');
   peerVideo.srcObject = null;
-  const peerAudioEl = document.getElementById('peer-audio-el');
-  if (peerAudioEl) peerAudioEl.srcObject = null;
 });
 socket.on('user-count', count => {
   document.getElementById('lbl-room-status').textContent =
